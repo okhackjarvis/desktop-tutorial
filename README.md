@@ -1,5 +1,21 @@
-# Welcome to GitHub Desktop!
+# 筋トレ記録
 
-This is your README. READMEs are where you can communicate what your project is and how to use it.
+スマホで使える筋トレ記録 Web アプリです。ビルド不要の HTML / CSS / JavaScript だけで動きます。
 
-Write your name on line 6, save it, and then head back to GitHub Desktop.
+## できること
+
+- 種目・重量・回数をセットごとに記録（前回の重量と回数を自動入力）
+- セット追加後に休憩タイマー（秒数は設定で変更）
+- 日付ごとの履歴
+- 種目ごとのグラフ（最大重量・推定1RM・総挙上量）
+- 種目の追加・削除
+- データのエクスポート／インポート（JSON）
+
+データはブラウザの localStorage に保存され、サーバーには送られません。
+
+## ローカルで動かす
+
+```sh
+python3 -m http.server 8000
+# http://localhost:8000 を開く
+```
