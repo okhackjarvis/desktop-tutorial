@@ -4,7 +4,7 @@ import {
   stagnation, intensityCheck, nextSuggestion, weightAdvice, proteinTarget, cycleDay,
   e1rm,
 } from './science.js';
-import { icon, logoMark, hydrateIcons, LOGO_PATH } from './icons.js';
+import { icon, hydrateIcons, LOGO_PATH } from './icons.js';
 import { illustration } from './illustrations.js';
 
 const STORAGE_KEY = 'kintore-v1';
@@ -306,30 +306,23 @@ function animateAddedSet(name) {
   btn.classList.add('flash');
 }
 
-// 自己ベスト更新のお祝い
+// 自己ベスト更新の知らせ（画面上部に控えめに出す）
 let celebrateTimer = null;
 function celebrate(name, value, diff) {
   const box = $('#celebrate');
-  const colors = ['#C8102E', '#EF3340', '#111114', '#ffffff', '#F5B700'];
-  const confetti = el('div', { class: 'confetti', 'aria-hidden': 'true' },
-    ...Array.from({ length: 42 }, (_, i) => el('i', {
-      style: `left:${Math.random() * 100}%;background:${colors[i % colors.length]};--x:${(Math.random() - 0.5) * 160}px;--r:${360 + Math.random() * 540}deg;--delay:${Math.random() * 0.35}s;--d:${1.5 + Math.random() * 1.1}s;${i % 3 === 0 ? 'width:6px;height:6px;border-radius:50%;' : ''}`,
-    })),
+  const close = () => { box.classList.add('hidden'); clearTimeout(celebrateTimer); };
+  box.replaceChildren(
+    el('span', { class: 'pb-icon' }, icon('trophy')),
+    el('div', { class: 'pb-text' },
+      el('strong', {}, '自己ベスト更新'),
+      el('span', {}, `${name}　推定1RM ${value}kg（+${diff}kg）`),
+    ),
   );
-  const close = () => { box.classList.add('hidden'); box.replaceChildren(); clearTimeout(celebrateTimer); };
-  box.replaceChildren(confetti, el('div', { class: 'celebrate-card' },
-    el('div', { class: 'celebrate-badge' }, icon('trophy')),
-    el('div', { class: 'celebrate-kicker' }, 'NEW PERSONAL BEST'),
-    el('div', { class: 'celebrate-title' }, '自己ベスト更新！'),
-    el('div', { class: 'celebrate-value' }, `${value}`, el('small', {}, ' kg')),
-    el('div', { class: 'celebrate-diff' }, `${name}・推定1RM +${diff}kg`),
-    el('p', { class: 'celebrate-sub' }, 'タップで閉じる'),
-  ));
   box.classList.remove('hidden');
   box.onclick = close;
-  if (navigator.vibrate) navigator.vibrate([60, 40, 60, 40, 160]);
+  if (navigator.vibrate) navigator.vibrate(80);
   clearTimeout(celebrateTimer);
-  celebrateTimer = setTimeout(close, 3600);
+  celebrateTimer = setTimeout(close, 4000);
 }
 
 function deleteSet(date, index) {
@@ -463,7 +456,6 @@ renderers.analysis = function renderAnalysis() {
     sub = 'この調子で、重さか回数を少しずつ増やしていきましょう。';
   }
   cards.push(el('div', { class: 'card hero' },
-    logoMark('logo-mark hero-mark'),
     el('h2', {}, `今週の分析・${GOALS[p.goal].short}`),
     el('p', { class: 'headline' }, headline),
     el('p', {}, sub),
@@ -683,7 +675,8 @@ $('#share-week').addEventListener('click', async () => {
   g.fillStyle = '#C8102E'; g.beginPath(); g.roundRect(0, 0, 512, 512, 112); g.fill();
   g.fillStyle = '#ffffff'; g.fill(new Path2D(LOGO_PATH));
   g.restore();
-  g.font = `600 30px Oswald, sans-serif`; g.fillStyle = '#F4F4F5'; g.fillText('K O K O R O Z A S H I', 196, 1270);
+  g.font = font(34, 800); g.fillStyle = '#F4F4F5'; g.fillText('志', 196, 1252);
+  g.font = font(24, 500); g.fillStyle = '#9A9AA6'; g.fillText('科学で鍛える筋トレ記録', 196, 1290);
 
   const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
   const file = new File([blob], `kintore-${end}.png`, { type: 'image/png' });

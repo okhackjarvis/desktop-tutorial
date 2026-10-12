@@ -294,9 +294,6 @@ button.ghost { background: transparent; border-color: transparent; }
   color: #fff; border: none;
 }
 .hero > * { position: relative; }
-.hero-mark { position: absolute !important; right: -18px; bottom: -34px; width: 150px; height: 150px; opacity: 0.14; }
-.hero-mark .logo-bg { fill: none; }
-.hero-mark .logo-fg { fill: #fff; }
 .hero h2 { color: #fff; opacity: 0.9; font-size: 14px; margin-bottom: 4px; }
 .hero .headline { font-size: 21px; font-weight: 800; margin: 0 0 6px; line-height: 1.35; }
 .hero p { margin: 0; opacity: 0.92; font-size: 14px; }
@@ -493,8 +490,8 @@ label.check input { width: 22px; min-height: 22px; height: 22px; margin: 0; acce
 .logo-mark { width: 34px; height: 34px; flex: none; display: block; }
 .logo-mark .logo-bg { fill: var(--brand); }
 .logo-mark .logo-fg { fill: #fff; }
-.logo-mark.big { width: 72px; height: 72px; filter: drop-shadow(0 8px 18px rgba(200, 16, 46, 0.35)); }
-.brand-word { font-family: var(--font-num); font-weight: 600; font-size: 15px; letter-spacing: 0.32em; color: var(--text); }
+.logo-mark.big { width: 64px; height: 64px; }
+.brand-text { font-weight: 800; font-size: 15px; color: var(--text); }
 .ob-brand { display: flex; justify-content: center; margin: 4px 0 10px; }
 #ob-title { text-align: center; font-size: 24px; font-weight: 900; }
 .side-brand { align-items: center; gap: 10px; }
@@ -542,47 +539,27 @@ button.primary.flash { animation: press-flash 0.5s ease-out; }
 @keyframes bump { 0%, 100% { transform: none; } 40% { transform: scale(1.25); } }
 .count.bump { display: inline-block; animation: bump 0.4s ease-out; color: var(--accent); }
 
-/* 自己ベスト更新のお祝い */
+/* 自己ベスト更新の知らせ：画面上部に控えめに出す */
 .celebrate {
-  position: fixed; inset: 0; z-index: 20;
-  display: flex; align-items: center; justify-content: center;
-  background: rgba(10, 10, 12, 0.55); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
-  animation: fade 0.2s ease-out;
+  position: fixed; z-index: 20; left: 50%; top: calc(12px + env(safe-area-inset-top));
+  transform: translateX(-50%);
+  width: min(440px, calc(100% - 24px));
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; border-radius: 16px;
+  background: var(--ink); color: #fff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  border-left: 4px solid var(--brand);
+  animation: toast-in 0.25s ease-out;
+  cursor: pointer;
 }
-.celebrate-card {
-  position: relative; z-index: 1;
-  width: min(340px, calc(100% - 48px)); text-align: center;
-  background: var(--card); color: var(--text); border-radius: 26px; padding: 28px 22px 22px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
-  animation: card-in 0.5s cubic-bezier(0.2, 1.4, 0.4, 1);
-}
-@keyframes card-in { from { opacity: 0; transform: scale(0.6) translateY(20px); } to { opacity: 1; transform: none; } }
-.celebrate-badge {
-  width: 84px; height: 84px; margin: -70px auto 10px; border-radius: 50%;
-  display: grid; place-items: center; color: #fff;
-  background: radial-gradient(circle at 30% 30%, #FF4D5E, var(--brand) 55%, var(--brand-deep));
-  box-shadow: 0 10px 30px rgba(200, 16, 46, 0.5), inset 0 0 0 4px rgba(255, 255, 255, 0.25);
-  animation: badge-spin 0.9s cubic-bezier(0.2, 1.2, 0.4, 1);
-}
-.celebrate-badge .icon { width: 42px; height: 42px; stroke-width: 1.8; }
-@keyframes badge-spin { from { transform: rotate(-200deg) scale(0.2); } to { transform: none; } }
-.celebrate-kicker { font-family: var(--font-num); letter-spacing: 0.3em; font-size: 12px; color: var(--accent); font-weight: 600; }
-.celebrate-title { font-size: 24px; font-weight: 900; margin: 4px 0 6px; }
-.celebrate-value { font-family: var(--font-num); font-size: 44px; font-weight: 600; line-height: 1.1; }
-.celebrate-value small { font-size: 18px; color: var(--muted); }
-.celebrate-diff { display: inline-block; margin-top: 6px; padding: 3px 12px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 800; font-size: 14px; }
-.celebrate-sub { color: var(--muted); font-size: 13px; margin: 12px 0 0; }
-.confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.confetti i {
-  position: absolute; top: -12px; width: 8px; height: 14px; border-radius: 2px; opacity: 0;
-  animation: confetti-fall var(--d, 1.8s) cubic-bezier(0.25, 0.6, 0.4, 1) var(--delay, 0s) forwards;
-}
-@keyframes confetti-fall {
-  0% { opacity: 1; transform: translate3d(0, 0, 0) rotate(0); }
-  100% { opacity: 0; transform: translate3d(var(--x, 0), 105vh, 0) rotate(var(--r, 540deg)); }
-}
+@media (prefers-color-scheme: dark) { .celebrate { background: var(--card-2); border: 1px solid var(--border); border-left: 4px solid var(--accent); } }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.pb-icon { flex: none; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--brand); }
+.pb-icon .icon { width: 20px; height: 20px; color: #fff; }
+.pb-text { display: grid; gap: 1px; min-width: 0; }
+.pb-text strong { font-size: 15px; font-weight: 800; }
+.pb-text span { font-size: 13px; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (prefers-reduced-motion: reduce) {
-  .sets li.just-added, button.primary.flash, .count.bump, .celebrate, .celebrate-card, .celebrate-badge { animation: none; }
-  .confetti { display: none; }
+  .sets li.just-added, button.primary.flash, .count.bump, .celebrate { animation: none; }
 }
