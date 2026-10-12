@@ -4,13 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#16a34a">
+  <meta name="description" content="研究に基づいて、目的に合わせたトレーニングの目安と弱点を教えてくれる筋トレ記録アプリ">
   <title>筋トレ記録</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="筋トレ記録">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="topbar">
     <h1>筋トレ記録</h1>
-    <a href="photo.html" class="photo-link">体の写真（試作）→</a>
+    <span id="goal-badge" class="badge"></span>
   </header>
 
   <main>
@@ -19,11 +25,13 @@
       <div class="row">
         <input type="date" id="log-date" aria-label="日付">
       </div>
+      <p id="cycle-info" class="hint hidden"></p>
 
       <form id="add-set-form" class="card">
         <label>種目
           <select id="exercise-select"></select>
         </label>
+        <div id="suggestion" class="suggestion hidden"></div>
         <div class="row">
           <label>重量 (kg)
             <input type="number" id="weight" inputmode="decimal" step="0.5" min="0" required>
@@ -31,7 +39,19 @@
           <label>回数
             <input type="number" id="reps" inputmode="numeric" step="1" min="1" required>
           </label>
+          <label>余力
+            <select id="rir" aria-describedby="rir-help">
+              <option value="">—</option>
+              <option value="0">0回</option>
+              <option value="1">1回</option>
+              <option value="2">2回</option>
+              <option value="3">3回</option>
+              <option value="4">4回</option>
+              <option value="5">5回以上</option>
+            </select>
+          </label>
         </div>
+        <p id="rir-help" class="hint">余力＝「あと何回できたか」。目安：<span id="rir-target"></span></p>
         <button type="submit" class="primary">セットを追加</button>
       </form>
 
@@ -42,46 +62,161 @@
       </div>
 
       <div id="day-log"></div>
+
+      <div class="card">
+        <h2>今日の調子</h2>
+        <div class="segmented" id="condition" role="radiogroup" aria-label="今日の調子">
+          <button type="button" data-v="1">😫</button>
+          <button type="button" data-v="2">😕</button>
+          <button type="button" data-v="3">😐</button>
+          <button type="button" data-v="4">🙂</button>
+          <button type="button" data-v="5">💪</button>
+        </div>
+      </div>
     </section>
 
-    <!-- 履歴 -->
-    <section id="tab-history" class="tab">
-      <div id="history-list"></div>
+    <!-- 分析 -->
+    <section id="tab-analysis" class="tab">
+      <div id="analysis"></div>
     </section>
 
-    <!-- グラフ -->
-    <section id="tab-graph" class="tab">
+    <!-- 進捗 -->
+    <section id="tab-progress" class="tab">
       <label>種目
         <select id="graph-exercise"></select>
       </label>
-      <div class="segmented" role="radiogroup">
+      <div class="segmented" id="metric-select" role="radiogroup">
         <button type="button" data-metric="max" class="on">最大重量</button>
         <button type="button" data-metric="e1rm">推定1RM</button>
         <button type="button" data-metric="volume">総挙上量</button>
       </div>
       <div id="graph" class="card"></div>
+
+      <div class="card">
+        <h2>今週のまとめをシェア</h2>
+        <p class="hint">今週の記録を画像にして、SNS に投稿できます。</p>
+        <button type="button" id="share-week">画像を作る</button>
+        <img id="share-preview" class="share-preview hidden" alt="今週のまとめ画像">
+      </div>
+
+      <h2 class="section-title">履歴</h2>
+      <div id="history-list"></div>
+    </section>
+
+    <!-- 体 -->
+    <section id="tab-body" class="tab">
+      <div class="card">
+        <h2>体重</h2>
+        <form id="bodyweight-form" class="row">
+          <input type="date" id="bw-date" aria-label="日付">
+          <input type="number" id="bw-value" inputmode="decimal" step="0.1" min="20" max="300" placeholder="kg" required aria-label="体重 (kg)">
+          <button type="submit">記録</button>
+        </form>
+        <div id="bw-summary"></div>
+        <div id="bw-graph"></div>
+      </div>
+
+      <div class="card" id="protein-card"></div>
+
+      <div class="card">
+        <h2>サイズ</h2>
+        <p class="hint">写真より正確に変化がわかります。メジャーで、毎回同じ場所をはかりましょう。</p>
+        <form id="measure-form">
+          <input type="date" id="ms-date" aria-label="日付">
+          <div class="grid2">
+            <label>ウエスト (cm)<input type="number" step="0.1" min="0" inputmode="decimal" data-key="waist"></label>
+            <label>胸囲 (cm)<input type="number" step="0.1" min="0" inputmode="decimal" data-key="chest"></label>
+            <label>腕 (cm)<input type="number" step="0.1" min="0" inputmode="decimal" data-key="arm"></label>
+            <label>太もも (cm)<input type="number" step="0.1" min="0" inputmode="decimal" data-key="thigh"></label>
+            <label>お尻 (cm)<input type="number" step="0.1" min="0" inputmode="decimal" data-key="hip"></label>
+          </div>
+          <button type="submit">記録</button>
+        </form>
+        <div id="measure-summary"></div>
+      </div>
+
+      <a class="card link-card" href="photo.html">
+        <h2>体の写真 →</h2>
+        <p class="hint">前回の写真を重ねて同じ位置で撮り、見た目の変化を比べられます。</p>
+      </a>
+
+      <div class="card" id="cycle-card"></div>
+
+      <div class="card coming-soon">
+        <h2>AI 食事アドバイス <span class="badge">準備中</span></h2>
+        <p class="hint">食事の写真や内容から、目的に合わせて改善点を AI がアドバイスする機能を準備しています。AI の利用料がかかるため、有料プランでの提供を予定しています。</p>
+      </div>
     </section>
 
     <!-- 設定 -->
     <section id="tab-settings" class="tab">
+      <form id="profile-form" class="card">
+        <h2>あなたについて</h2>
+        <label>目的
+          <select id="pf-goal"></select>
+        </label>
+        <label>トレーニング歴
+          <select id="pf-experience"></select>
+        </label>
+        <label>トレーニングできる場所
+          <select id="pf-equipment"></select>
+        </label>
+        <div class="row">
+          <label>週に何日
+            <input type="number" id="pf-days" min="1" max="7" step="1" inputmode="numeric">
+          </label>
+          <label>身長 (cm)
+            <input type="number" id="pf-height" min="100" max="250" step="0.1" inputmode="decimal">
+          </label>
+        </div>
+        <label>性別（任意）
+          <select id="pf-sex">
+            <option value="">回答しない</option>
+            <option value="female">女性</option>
+            <option value="male">男性</option>
+          </select>
+        </label>
+        <fieldset>
+          <legend>特に伸ばしたい部位</legend>
+          <div id="pf-focus" class="chips"></div>
+        </fieldset>
+        <fieldset>
+          <legend>痛めている・避けたい部位</legend>
+          <div id="pf-avoid" class="chips"></div>
+        </fieldset>
+        <label class="check"><input type="checkbox" id="pf-cycle"> 生理周期を記録する</label>
+        <button type="submit" class="primary">保存</button>
+        <p id="profile-saved" class="hint" role="status"></p>
+      </form>
+
       <div class="card">
         <h2>種目</h2>
         <ul id="exercise-list" class="plain"></ul>
-        <form id="add-exercise-form" class="row">
-          <input type="text" id="new-exercise" placeholder="種目を追加" required>
-          <button type="submit">追加</button>
+        <form id="add-exercise-form">
+          <input type="text" id="new-exercise" placeholder="種目名" required>
+          <div class="row">
+            <label>主に使う部位
+              <select id="new-primary"></select>
+            </label>
+            <label>補助的に使う部位
+              <select id="new-secondary"><option value="">なし</option></select>
+            </label>
+          </div>
+          <button type="submit">種目を追加</button>
         </form>
       </div>
+
       <div class="card">
         <h2>休憩タイマー</h2>
         <label>秒数
-          <input type="number" id="rest-seconds" min="0" step="15">
+          <input type="number" id="rest-seconds" min="0" step="15" inputmode="numeric">
         </label>
-        <p class="hint">0 にするとタイマーを使いません。</p>
+        <p class="hint">空欄にすると目的に合わせた目安（<span id="rest-default"></span>秒）を使います。0 でタイマーを使いません。</p>
       </div>
+
       <div class="card">
         <h2>データ</h2>
-        <p class="hint">データはこの端末のブラウザにだけ保存されます。機種変更の前にエクスポートしてください。</p>
+        <p class="hint">記録はこのスマホのブラウザにだけ保存されます。機種変更の前にエクスポートしてください。体の写真はエクスポートに含まれません。</p>
         <div class="row">
           <button type="button" id="export">エクスポート</button>
           <label class="button">インポート
@@ -89,16 +224,58 @@
           </label>
         </div>
       </div>
+
+      <div class="card">
+        <h2>このアプリについて</h2>
+        <p class="hint">記録・分析・グラフ・体重・写真の機能は、ずっと無料でお使いいただけます。データはあなたのスマホの中だけに保存され、外部に送られることはありません。今後追加予定の AI 機能は、利用料がかかるため有料プランになる予定です。</p>
+        <p class="hint">アドバイスは研究に基づく一般的な目安で、医療的な助言ではありません。持病のある方、妊娠中の方、極端な食事制限を考えている方は、医師に相談してください。</p>
+        <p class="hint">ホーム画面に追加すると、アプリのように全画面で使え、電波がない場所でも記録できます。</p>
+      </div>
     </section>
   </main>
 
+  <!-- 初回設定 -->
+  <div id="onboarding" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="ob-title">
+    <form id="onboarding-form" class="card sheet">
+      <h2 id="ob-title">はじめに教えてください</h2>
+      <p class="hint">あなたの目的に合わせて、研究に基づいた目安を出します。あとから設定で変えられます。</p>
+      <fieldset>
+        <legend>目的</legend>
+        <div id="ob-goal" class="choices"></div>
+      </fieldset>
+      <label>トレーニング歴
+        <select id="ob-experience"></select>
+      </label>
+      <label>トレーニングできる場所
+        <select id="ob-equipment"></select>
+      </label>
+      <div class="row">
+        <label>体重 (kg)
+          <input type="number" id="ob-weight" min="20" max="300" step="0.1" inputmode="decimal">
+        </label>
+        <label>身長 (cm)
+          <input type="number" id="ob-height" min="100" max="250" step="0.1" inputmode="decimal">
+        </label>
+      </div>
+      <label>性別（任意）
+        <select id="ob-sex">
+          <option value="">回答しない</option>
+          <option value="female">女性</option>
+          <option value="male">男性</option>
+        </select>
+      </label>
+      <button type="submit" class="primary">はじめる</button>
+    </form>
+  </div>
+
   <nav class="tabbar">
     <button data-tab="log" class="on">記録</button>
-    <button data-tab="history">履歴</button>
-    <button data-tab="graph">グラフ</button>
+    <button data-tab="analysis">分析</button>
+    <button data-tab="progress">進捗</button>
+    <button data-tab="body">体</button>
     <button data-tab="settings">設定</button>
   </nav>
 
-  <script src="app.js"></script>
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>
