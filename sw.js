@@ -1,11 +1,14 @@
 // オフライン対応：通信できるときは最新を取得してキャッシュを更新し、
 // 通信できないときはキャッシュから返す
-const CACHE = 'kintore-v4';
+const CACHE = 'kokorozashi-v5';
 const ASSETS = [
   './', 'index.html', 'style.css', 'js/app.js', 'js/science.js',
   'photo.html', 'photo.css', 'photo.js', 'manifest.webmanifest',
-  'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
+  'js/icons.js', 'js/illustrations.js',
+  'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-32.png',
 ];
+// Google Fonts はオフラインでも表示できるよう、一度読んだらキャッシュから使う
+const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
@@ -21,7 +24,17 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const { request } = e;
-  if (request.method !== 'GET' || new URL(request.url).origin !== location.origin) return;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  if (FONT_HOSTS.includes(url.hostname)) {
+    e.respondWith(caches.match(request).then((hit) => hit || fetch(request).then((res) => {
+      const copy = res.clone();
+      caches.open(CACHE).then((c) => c.put(request, copy));
+      return res;
+    })));
+    return;
+  }
+  if (url.origin !== location.origin) return;
   e.respondWith(
     fetch(request)
       .then((res) => {

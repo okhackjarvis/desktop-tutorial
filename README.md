@@ -1,4 +1,6 @@
-# 筋トレ記録
+# 志（KOKOROZASHI）
+
+科学で鍛える筋トレ記録アプリ。
 
 研究に基づいて、目的に合わせたトレーニングの目安と弱点を教えてくれる筋トレ記録 Web アプリ（PWA）です。ビルド不要の HTML / CSS / JavaScript だけで動き、データはすべて端末内に保存されます。
 
@@ -22,6 +24,8 @@ AI による食事アドバイスは準備中です（サーバーと AI の利�
 | `js/app.js` | 画面の処理 |
 | `js/science.js` | 研究に基づく目安・分析ロジック（画面に依存しない関数） |
 | `photo.html` / `photo.js` / `photo.css` | 体の写真の撮影と比較 |
+| `js/icons.js` | アイコン（Lucide）と志のロゴ |
+| `js/illustrations.js` | 記録がない画面のイラスト |
 | `sw.js` / `manifest.webmanifest` / `icons/` | PWA（オフライン対応・ホーム画面のアイコン） |
 
 アプリを更新したときは、`sw.js` の `CACHE` の名前（`kintore-v2` など）を変えると、利用者の端末のキャッシュが入れ替わります。
@@ -36,3 +40,10 @@ python3 -m http.server 8000
 ## 注意
 
 アドバイスは研究に基づく一般的な目安で、医療的な助言ではありません。
+
+## ブランド
+
+- ロゴ：漢字「志」（Zen Antique の字形をもとにした図形。SIL Open Font License）
+- ブランドカラー：志レッド `#C8102E`（ダークモードでは `#EF3340`）
+- フォント：M PLUS 1（本文・見出し）、Oswald（数字）。Google Fonts から読み込み
+- アイコン：[Lucide](https://lucide.dev)（ISC License）

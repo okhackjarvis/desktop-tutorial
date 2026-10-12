@@ -3,19 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#16a34a">
+  <meta name="theme-color" content="#C8102E">
   <meta name="description" content="研究に基づいて、目的に合わせたトレーニングの目安と弱点を教えてくれる筋トレ記録アプリ">
-  <title>筋トレ記録</title>
+  <title>志 | 科学で鍛える筋トレ記録</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="筋トレ記録">
+  <meta name="apple-mobile-web-app-title" content="志">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+1:wght@400;500;700;800;900&family=Oswald:wght@500;600;700&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="topbar">
-    <h1>筋トレ記録</h1>
+    <h1 class="brand"><i data-logo class="logo-mark"></i><span class="brand-word">KOKOROZASHI</span><span class="sr-only">志</span></h1>
     <span id="page-title" class="page-title">記録</span>
     <span id="goal-badge" class="badge"></span>
   </header>
@@ -24,12 +28,12 @@
     <!-- 記録 -->
     <section id="tab-log" class="tab active">
       <div class="date-nav">
-        <button type="button" id="date-prev" class="icon-btn" aria-label="前の日">‹</button>
+        <button type="button" id="date-prev" class="icon-btn" aria-label="前の日"><i data-icon="chevron-left" class="icon"></i></button>
         <label class="date-label">
           <span id="date-text"></span>
           <input type="date" id="log-date" aria-label="日付を選ぶ">
         </label>
-        <button type="button" id="date-next" class="icon-btn" aria-label="次の日">›</button>
+        <button type="button" id="date-next" class="icon-btn" aria-label="次の日"><i data-icon="chevron-right" class="icon"></i></button>
       </div>
       <p id="cycle-info" class="pill hidden"></p>
 
@@ -45,17 +49,17 @@
           <div class="stepper">
             <span class="stepper-label">重量 <small>kg</small></span>
             <div class="stepper-ctrl">
-              <button type="button" class="step" data-target="weight" data-delta="-2.5" aria-label="重量を減らす">−</button>
+              <button type="button" class="step" data-target="weight" data-delta="-2.5" aria-label="重量を減らす"><i data-icon="minus" class="icon"></i></button>
               <input type="number" id="weight" inputmode="decimal" step="0.5" min="0" required aria-label="重量 (kg)">
-              <button type="button" class="step" data-target="weight" data-delta="2.5" aria-label="重量を増やす">＋</button>
+              <button type="button" class="step" data-target="weight" data-delta="2.5" aria-label="重量を増やす"><i data-icon="plus" class="icon"></i></button>
             </div>
           </div>
           <div class="stepper">
             <span class="stepper-label">回数</span>
             <div class="stepper-ctrl">
-              <button type="button" class="step" data-target="reps" data-delta="-1" aria-label="回数を減らす">−</button>
+              <button type="button" class="step" data-target="reps" data-delta="-1" aria-label="回数を減らす"><i data-icon="minus" class="icon"></i></button>
               <input type="number" id="reps" inputmode="numeric" step="1" min="1" required aria-label="回数">
-              <button type="button" class="step" data-target="reps" data-delta="1" aria-label="回数を増やす">＋</button>
+              <button type="button" class="step" data-target="reps" data-delta="1" aria-label="回数を増やす"><i data-icon="plus" class="icon"></i></button>
             </div>
           </div>
         </div>
@@ -79,7 +83,7 @@
 
       <div id="timer" class="timer hidden" role="timer">
         <div>
-          <span class="timer-label">休憩</span>
+          <span class="timer-label"><i data-icon="timer" class="icon"></i>休憩</span>
           <strong id="timer-display">0:00</strong>
         </div>
         <button type="button" id="timer-stop">スキップ</button>
@@ -126,7 +130,7 @@
       <div class="card">
         <h2>今週のまとめをシェア</h2>
         <p class="hint">今週の記録を画像にして、SNS に投稿できます。</p>
-        <button type="button" id="share-week">画像を作る</button>
+        <button type="button" id="share-week"><i data-icon="share-2" class="icon"></i>画像を作る</button>
         <img id="share-preview" class="share-preview hidden" alt="今週のまとめ画像">
       </div>
       </div>
@@ -169,6 +173,7 @@
       </div>
 
       <a class="card link-card" href="photo.html">
+        <i data-icon="camera" class="icon link-icon"></i>
         <div>
           <h2>体の写真</h2>
           <p class="hint">前回の写真を重ねて同じ位置で撮り、見た目の変化を比べられます。</p>
@@ -178,7 +183,7 @@
       <div class="card" id="cycle-card"></div>
 
       <div class="card coming-soon">
-        <h2>AI 食事アドバイス <span class="badge">準備中</span></h2>
+        <h2><i data-icon="sparkles" class="icon"></i>AI 食事アドバイス <span class="badge">準備中</span></h2>
         <p class="hint">食事の写真や内容から、目的に合わせて改善点を AI がアドバイスする機能を準備しています。AI の利用料がかかるため、有料プランでの提供を予定しています。</p>
       </div>
     </section>
@@ -272,8 +277,9 @@
   <!-- 初回設定 -->
   <div id="onboarding" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="ob-title">
     <form id="onboarding-form" class="card sheet">
-      <h2 id="ob-title">はじめに教えてください</h2>
-      <p class="hint">あなたの目的に合わせて、研究に基づいた目安を出します。あとから設定で変えられます。</p>
+      <div class="ob-brand"><i data-logo class="logo-mark big"></i></div>
+      <h2 id="ob-title">志へようこそ</h2>
+      <p class="hint">あなたの目的を教えてください。研究に基づいた目安を、あなたに合わせて出します。あとから設定で変えられます。</p>
       <fieldset>
         <legend>目的</legend>
         <div id="ob-goal" class="choices"></div>
@@ -303,13 +309,15 @@
     </form>
   </div>
 
+  <div id="celebrate" class="celebrate hidden" role="status" aria-live="polite"></div>
+
   <nav class="tabbar" aria-label="メニュー">
-    <div class="side-brand" aria-hidden="true">筋トレ記録</div>
-    <button data-tab="log" class="on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>記録</span></button>
-    <button data-tab="analysis"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>分析</span></button>
-    <button data-tab="progress"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg><span>進捗</span></button>
-    <button data-tab="body"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM5 22l2-9h10l2 9M7 13l-2-4M17 13l2-4"/></svg><span>体</span></button>
-    <button data-tab="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M10 16v4"/></svg><span>設定</span></button>
+    <div class="side-brand" aria-hidden="true"><i data-logo class="logo-mark"></i><span class="brand-word">KOKOROZASHI</span></div>
+    <button data-tab="log" class="on"><i data-icon="dumbbell" class="icon"></i><span>記録</span></button>
+    <button data-tab="analysis"><i data-icon="chart-column" class="icon"></i><span>分析</span></button>
+    <button data-tab="progress"><i data-icon="trending-up" class="icon"></i><span>進捗</span></button>
+    <button data-tab="body"><i data-icon="person-standing" class="icon"></i><span>体</span></button>
+    <button data-tab="settings"><i data-icon="settings-2" class="icon"></i><span>設定</span></button>
   </nav>
 
   <script type="module" src="js/app.js"></script>
