@@ -16,6 +16,7 @@
 <body>
   <header class="topbar">
     <h1>筋トレ記録</h1>
+    <span id="page-title" class="page-title">記録</span>
     <span id="goal-badge" class="badge"></span>
   </header>
 
@@ -32,6 +33,8 @@
       </div>
       <p id="cycle-info" class="pill hidden"></p>
 
+      <div class="log-grid">
+      <div class="log-main">
       <form id="add-set-form" class="card">
         <label class="field">種目
           <select id="exercise-select"></select>
@@ -81,7 +84,9 @@
         </div>
         <button type="button" id="timer-stop">スキップ</button>
       </div>
+      </div>
 
+      <div class="log-side">
       <div id="day-log"></div>
 
       <div class="card">
@@ -94,6 +99,8 @@
           <button type="button" data-v="5" aria-label="とても良い">💪</button>
         </div>
       </div>
+          </div>
+      </div>
     </section>
 
     <!-- 分析 -->
@@ -103,6 +110,8 @@
 
     <!-- 進捗 -->
     <section id="tab-progress" class="tab">
+      <div class="cols">
+      <div>
       <label class="field">種目
         <select id="graph-exercise"></select>
       </label>
@@ -112,12 +121,14 @@
         <button type="button" data-metric="volume">総挙上量</button>
       </div>
       <div id="graph" class="card"></div>
+      </div>
 
       <div class="card">
         <h2>今週のまとめをシェア</h2>
         <p class="hint">今週の記録を画像にして、SNS に投稿できます。</p>
         <button type="button" id="share-week">画像を作る</button>
         <img id="share-preview" class="share-preview hidden" alt="今週のまとめ画像">
+      </div>
       </div>
 
       <h2 class="section-title">履歴</h2>
@@ -292,7 +303,8 @@
     </form>
   </div>
 
-  <nav class="tabbar">
+  <nav class="tabbar" aria-label="メニュー">
+    <div class="side-brand" aria-hidden="true">筋トレ記録</div>
     <button data-tab="log" class="on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>記録</span></button>
     <button data-tab="analysis"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>分析</span></button>
     <button data-tab="progress"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg><span>進捗</span></button>

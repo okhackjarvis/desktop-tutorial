@@ -77,3 +77,9 @@ body { padding-bottom: 32px; }
   width: auto; padding: 2px 8px; font-size: 12px;
   background: rgba(0, 0, 0, 0.55); color: #fff; border: none;
 }
+
+/* PC では中央にまとめる（サイドバーはない） */
+@media (min-width: 960px) {
+  .topbar, main { margin-left: auto; margin-right: auto; max-width: 720px; }
+  .topbar h1 { visibility: visible; }
+}
