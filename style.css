@@ -409,3 +409,64 @@ label.check input { width: 22px; min-height: 22px; height: 22px; margin: 0; acce
 .tabbar svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .tabbar button.on { color: var(--accent-strong); }
 .tabbar button.on svg { stroke-width: 2.5; }
+
+/* ---------- PC（広い画面）用のレイアウト ---------- */
+.side-brand, .page-title { display: none; }
+
+@media (min-width: 960px) {
+  :root { --side: 232px; }
+  body { padding-bottom: 0; }
+
+  /* 下のタブ → 左のサイドバー */
+  .tabbar {
+    top: 0; right: auto; width: var(--side);
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 24px 14px;
+    border-top: none; border-right: 1px solid var(--border);
+    background: var(--card);
+  }
+  .side-brand {
+    display: block; font-size: 20px; font-weight: 800; letter-spacing: 0.02em;
+    padding: 4px 12px 20px; color: var(--text);
+  }
+  .tabbar button {
+    flex-direction: row; justify-content: flex-start; gap: 12px;
+    min-height: 46px; padding: 0 14px; font-size: 15px; width: 100%;
+  }
+  .tabbar button:hover { background: var(--card-2); }
+  .tabbar button.on { background: var(--accent-soft); }
+
+  .topbar { margin-left: var(--side); padding: 22px 40px 14px; }
+  .topbar h1 { display: none; }
+  .page-title { display: block; font-size: 26px; font-weight: 800; }
+  main { margin-left: var(--side); max-width: 1180px; padding: 0 40px 48px; }
+
+  /* 記録：左に入力、右にその日の記録 */
+  .log-grid { display: grid; grid-template-columns: minmax(380px, 1fr) minmax(340px, 1fr); gap: 20px; align-items: start; }
+  .log-side { position: sticky; top: 90px; }
+  .date-nav { max-width: 480px; }
+  .timer { position: static; }
+
+  /* 分析・体・設定：カードを2列に */
+  #analysis, #tab-body.active, #tab-settings.active {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; align-items: start;
+  }
+  #analysis > .hero, #analysis > .tiles, #tab-body > .tiles { grid-column: 1 / -1; }
+  .tiles { grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .tile { padding: 18px; }
+  .tile .t-value { font-size: 30px; }
+  .hero { padding: 26px 28px; }
+  .hero .headline { font-size: 26px; }
+
+  /* 進捗：グラフとシェアを横並び */
+  .cols { display: grid; grid-template-columns: 3fr 2fr; gap: 20px; align-items: start; }
+  #history-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0 14px; }
+
+  /* 初回設定は中央のダイアログに */
+  .overlay { align-items: center; }
+  .sheet { max-width: 520px; border-radius: 24px; max-height: 86vh; }
+
+  /* マウス操作向けのホバー */
+  .card.history-day:hover, .link-card:hover { border-color: var(--accent); }
+  button.primary:hover { background: var(--accent-strong); }
+}

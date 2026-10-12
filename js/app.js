@@ -99,7 +99,9 @@ function evidence(...keys) {
 
 // 折れ線グラフ（SVG）
 function lineChart(points, unit) {
-  const W = 340, H = 200, padL = 44, padR = 12, padT = 14, padB = 26;
+  // PC の広い画面では横長に描いて、文字が大きくなりすぎないようにする
+  const wide = window.matchMedia('(min-width: 960px)').matches;
+  const W = wide ? 640 : 340, H = wide ? 260 : 200, padL = 44, padR = 12, padT = 14, padB = 26;
   const values = points.map((p) => p.value);
   let lo = Math.min(...values), hi = Math.max(...values);
   if (lo === hi) { lo -= 1; hi += 1; }
@@ -150,6 +152,7 @@ document.querySelectorAll('.tabbar button').forEach((btn) => btn.addEventListene
 
 function showTab(name) {
   document.querySelectorAll('.tabbar button').forEach((b) => b.classList.toggle('on', b.dataset.tab === name));
+  $('#page-title').textContent = document.querySelector(`.tabbar button[data-tab="${name}"] span`)?.textContent || '';
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === `tab-${name}`));
   renderers[name]?.();
   window.scrollTo(0, 0);
