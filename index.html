@@ -39,10 +39,25 @@
 
       <div class="log-grid">
       <div class="log-main">
+      <div id="menu-card" class="card menu-card hidden"></div>
+
       <form id="add-set-form" class="card">
-        <label class="field">種目
-          <select id="exercise-select"></select>
-        </label>
+        <div class="field">
+          <label for="exercise-input" class="field-label">種目</label>
+          <div class="combo" id="exercise-combo">
+            <input type="text" id="exercise-input" role="combobox" aria-expanded="false" aria-controls="exercise-options"
+              aria-autocomplete="list" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="入力して検索（例：ベンチ、胸）">
+            <button type="button" class="combo-toggle" id="exercise-toggle" tabindex="-1" aria-label="種目の一覧を開く"><i data-icon="chevron-down" class="icon"></i></button>
+            <ul id="exercise-options" class="combo-list hidden" role="listbox" aria-label="種目の候補"></ul>
+          </div>
+          <input type="hidden" id="exercise-select">
+          <div id="new-exercise-inline" class="new-inline hidden">
+            <span>「<b id="new-ex-name"></b>」を追加。主に鍛える部位：</span>
+            <select id="new-ex-muscle" aria-label="主に鍛える部位"></select>
+            <button type="button" id="new-ex-add" class="small primary">追加</button>
+            <button type="button" id="new-ex-cancel" class="small">やめる</button>
+          </div>
+        </div>
         <div id="suggestion" class="suggestion hidden"></div>
 
         <div class="steppers">
@@ -229,6 +244,28 @@
         <p id="profile-saved" class="hint" role="status"></p>
       </form>
 
+      <div class="card" id="menu-settings">
+        <h2>今日のメニュー</h2>
+        <label class="check"><input type="checkbox" id="mn-enabled"> 記録画面に今日のメニューを出す</label>
+        <label>分け方
+          <select id="mn-split"></select>
+        </label>
+        <label>種目の選び方
+          <select id="mn-style"></select>
+        </label>
+        <label>1回の種目数
+          <select id="mn-size">
+            <option value="">おまかせ</option>
+            <option value="4">4種目</option>
+            <option value="5">5種目</option>
+            <option value="6">6種目</option>
+          </select>
+        </label>
+        <p class="hint" id="mn-pins-info"></p>
+        <button type="button" id="mn-reset-pins" class="small">固定した種目をリセット</button>
+        <p class="hint">メニューの「入れ替え」で選んだ種目は、次回からも同じものが出ます。自分で追加した種目も候補になります。</p>
+      </div>
+
       <div class="card">
         <h2>種目</h2>
         <ul id="exercise-list" class="plain"></ul>
@@ -289,6 +326,14 @@
       </label>
       <label>トレーニングできる場所
         <select id="ob-equipment"></select>
+      </label>
+      <label>週に何日トレーニングしますか
+        <select id="ob-days">
+          <option value="2">週2日</option>
+          <option value="3" selected>週3日</option>
+          <option value="4">週4日</option>
+          <option value="5">週5日以上</option>
+        </select>
       </label>
       <div class="row">
         <label>体重 (kg)

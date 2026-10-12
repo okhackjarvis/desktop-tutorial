@@ -11,28 +11,40 @@ export const MAJOR_MUSCLES = ['chest', 'back', 'shoulders', 'quads', 'hamstrings
 export const EQUIPMENT = { gym: 'ジム', dumbbell: '自宅（ダンベルあり）', bodyweight: '自重のみ' };
 
 // muscles: 主に使う部位 = 1、補助的に使う部位 = 0.5（fractional sets の数え方）
-// equip: その種目ができる環境
+// equip: その種目ができる環境 / type: 器具の種類 / level: 1 = 初心者向け（フォームが簡単）、2 = フリーウェイトの基本種目
+// どこのジムにもある基礎的な種目だけに絞っている
 export const DEFAULT_EXERCISES = [
-  { name: 'ベンチプレス', muscles: { chest: 1, triceps: 0.5, shoulders: 0.5 }, equip: ['gym'] },
+  { name: 'チェストプレス', muscles: { chest: 1, triceps: 0.5, shoulders: 0.5 }, equip: ['gym'], type: 'machine', level: 1 },
+  { name: '腕立て伏せ', muscles: { chest: 1, triceps: 0.5, shoulders: 0.5 }, equip: ['gym', 'dumbbell', 'bodyweight'], type: 'bodyweight', level: 1 },
+  { name: 'ダンベルプレス', muscles: { chest: 1, triceps: 0.5, shoulders: 0.5 }, equip: ['gym', 'dumbbell'], type: 'dumbbell', level: 2 },
+  { name: 'ベンチプレス', muscles: { chest: 1, triceps: 0.5, shoulders: 0.5 }, equip: ['gym'], type: 'barbell', level: 2 },
+  { name: 'ラットプルダウン', muscles: { back: 1, biceps: 0.5 }, equip: ['gym'], type: 'machine', level: 1 },
+  { name: 'シーテッドロウ', muscles: { back: 1, biceps: 0.5 }, equip: ['gym'], type: 'machine', level: 1 },
+  { name: 'ダンベルロウ', muscles: { back: 1, biceps: 0.5 }, equip: ['gym', 'dumbbell'], type: 'dumbbell', level: 2 },
+  { name: 'ショルダープレス（マシン）', muscles: { shoulders: 1, triceps: 0.5 }, equip: ['gym'], type: 'machine', level: 1 },
+  { name: 'ダンベルショルダープレス', muscles: { shoulders: 1, triceps: 0.5 }, equip: ['gym', 'dumbbell'], type: 'dumbbell', level: 2 },
+  { name: 'サイドレイズ', muscles: { shoulders: 1 }, equip: ['gym', 'dumbbell'], type: 'dumbbell', level: 1 },
+  { name: 'レッグプレス', muscles: { quads: 1, glutes: 0.5 }, equip: ['gym'], type: 'machine', level: 1 },
+  { name: 'スクワット', muscles: { quads: 1, glutes: 0.5 }, equip: ['gym', 'dumbbell', 'bodyweight'], type: 'barbell', level: 2 },
+  { name: 'レッグエクステンション', muscles: { quads: 1 }, equip: ['gym'], type: 'machine', level: 1 },
+  { name: 'レッグカール', muscles: { hamstrings: 1 }, equip: ['gym'], type: 'machine', level: 1 },
+  { name: 'ルーマニアンデッドリフト', muscles: { hamstrings: 1, glutes: 0.5 }, equip: ['gym', 'dumbbell'], type: 'barbell', level: 2 },
+  { name: 'アームカール', muscles: { biceps: 1 }, equip: ['gym', 'dumbbell'], type: 'dumbbell', level: 1 },
+  { name: 'トライセプスプッシュダウン', muscles: { triceps: 1 }, equip: ['gym'], type: 'cable', level: 1 },
+  { name: 'クランチ', muscles: { abs: 1 }, equip: ['gym', 'dumbbell', 'bodyweight'], type: 'bodyweight', level: 1 },
+];
+
+// 以前の版の標準種目。リストからは外したが、過去の記録の部位集計に使う
+export const LEGACY_EXERCISES = [
   { name: 'インクラインダンベルプレス', muscles: { chest: 1, shoulders: 0.5, triceps: 0.5 }, equip: ['gym', 'dumbbell'] },
   { name: 'ダンベルフライ', muscles: { chest: 1 }, equip: ['gym', 'dumbbell'] },
-  { name: '腕立て伏せ', muscles: { chest: 1, triceps: 0.5, shoulders: 0.5 }, equip: ['gym', 'dumbbell', 'bodyweight'] },
-  { name: 'ラットプルダウン', muscles: { back: 1, biceps: 0.5 }, equip: ['gym'] },
   { name: '懸垂', muscles: { back: 1, biceps: 0.5 }, equip: ['gym', 'bodyweight'] },
   { name: 'ベントオーバーロウ', muscles: { back: 1, biceps: 0.5 }, equip: ['gym', 'dumbbell'] },
   { name: 'ショルダープレス', muscles: { shoulders: 1, triceps: 0.5 }, equip: ['gym', 'dumbbell'] },
-  { name: 'サイドレイズ', muscles: { shoulders: 1 }, equip: ['gym', 'dumbbell'] },
-  { name: 'アームカール', muscles: { biceps: 1 }, equip: ['gym', 'dumbbell'] },
-  { name: 'トライセプスプッシュダウン', muscles: { triceps: 1 }, equip: ['gym'] },
-  { name: 'スクワット', muscles: { quads: 1, glutes: 0.5 }, equip: ['gym', 'dumbbell', 'bodyweight'] },
   { name: 'ブルガリアンスクワット', muscles: { quads: 1, glutes: 1 }, equip: ['gym', 'dumbbell', 'bodyweight'] },
-  { name: 'レッグプレス', muscles: { quads: 1, glutes: 0.5 }, equip: ['gym'] },
   { name: 'デッドリフト', muscles: { glutes: 1, hamstrings: 0.5, back: 0.5 }, equip: ['gym'] },
-  { name: 'ルーマニアンデッドリフト', muscles: { hamstrings: 1, glutes: 0.5 }, equip: ['gym', 'dumbbell'] },
-  { name: 'レッグカール', muscles: { hamstrings: 1 }, equip: ['gym'] },
   { name: 'ヒップスラスト', muscles: { glutes: 1, hamstrings: 0.5 }, equip: ['gym', 'dumbbell', 'bodyweight'] },
   { name: 'カーフレイズ', muscles: { calves: 1 }, equip: ['gym', 'dumbbell', 'bodyweight'] },
-  { name: 'クランチ', muscles: { abs: 1 }, equip: ['gym', 'dumbbell', 'bodyweight'] },
 ];
 
 // 目的ごとの目安。sets は 1部位あたりの週のセット数。
@@ -77,6 +89,16 @@ export const REFS = {
     title: '頻度',
     text: '週の総セット数が同じなら、頻度そのものの筋肥大への影響は小さい。週2回以上に分けると、質を保ったまま量をこなしやすい。',
     cites: ['Schoenfeld ら 2019, J Sports Sci（頻度と筋肥大）', 'Pelland ら（頻度のメタ回帰）'],
+  },
+  machines: {
+    title: 'マシンとフリーウェイト',
+    text: 'マシンとフリーウェイトで、筋肥大の効果に大きな差は見られない。筋力は、練習した方法で測ると伸びやすい。マシンは動きが決まっていてフォームを覚えやすいので、初心者はマシン中心で始め、慣れてきたらフリーウェイトの基本種目を加えるのが無理のない進め方。',
+    cites: ['Haugen ら 2023, BMC Sports Sci Med Rehabil（フリーウェイトとマシンのメタ分析、13研究）', 'Heidel ら 2021（フリーウェイトとマシンのメタ分析）'],
+  },
+  split: {
+    title: 'メニューの分け方',
+    text: '週の総セット数が同じなら、全身・上下・部位別のどの分け方でも筋肥大の効果は大きく変わらない。続けやすい日数に合わせて選べばよい。',
+    cites: ['Schoenfeld ら 2019, J Sports Sci（頻度と筋肥大）', 'Ramos-Campo ら 2024, J Strength Cond Res（全身と分割法の比較）'],
   },
   progression: {
     title: '漸進性過負荷',
@@ -147,7 +169,7 @@ export function muscleTarget(profile, muscle) {
 // 利用者の種目リストに、標準の種目を補ったもの（リストから外した種目の過去の記録も集計できるように）
 function allExercises(state) {
   const names = new Set(state.exercises.map((e) => e.name));
-  return [...state.exercises, ...DEFAULT_EXERCISES.filter((e) => !names.has(e.name))];
+  return [...state.exercises, ...[...DEFAULT_EXERCISES, ...LEGACY_EXERCISES].filter((e) => !names.has(e.name))];
 }
 
 function exerciseMap(state) {
@@ -340,4 +362,102 @@ export function cycleDay(periods, date = today()) {
   if (!starts.length) return null;
   const day = daysBetween(starts.at(-1), date) + 1;
   return day <= 60 ? day : null;
+}
+
+// ---------- 今日のメニュー ----------
+// 枠（slot）ごとに候補の種目を持ち、レベルや好みに合わせて1つ選ぶ
+export const SLOTS = {
+  chest: { label: '胸', muscle: 'chest', options: ['チェストプレス', '腕立て伏せ', 'ダンベルプレス', 'ベンチプレス'] },
+  pulldown: { label: '背中（上から引く）', muscle: 'back', options: ['ラットプルダウン'] },
+  row: { label: '背中（手前に引く）', muscle: 'back', options: ['シーテッドロウ', 'ダンベルロウ'] },
+  press: { label: '肩', muscle: 'shoulders', options: ['ショルダープレス（マシン）', 'ダンベルショルダープレス'] },
+  lateral: { label: '肩（横）', muscle: 'shoulders', options: ['サイドレイズ'] },
+  legs: { label: '脚', muscle: 'quads', options: ['レッグプレス', 'スクワット'] },
+  quadiso: { label: '太もも前', muscle: 'quads', options: ['レッグエクステンション'] },
+  hinge: { label: '太もも裏・お尻', muscle: 'hamstrings', options: ['レッグカール', 'ルーマニアンデッドリフト'] },
+  biceps: { label: '腕（力こぶ）', muscle: 'biceps', options: ['アームカール'] },
+  triceps: { label: '腕（裏側）', muscle: 'triceps', options: ['トライセプスプッシュダウン'] },
+  core: { label: '腹筋', muscle: 'abs', options: ['クランチ'] },
+};
+// 重さを扱える主要な種目の枠（中級者はここでフリーウェイトを優先する）
+const COMPOUND_SLOTS = ['chest', 'row', 'press', 'legs', 'hinge'];
+
+export const SPLITS = {
+  full: { label: '全身', days: [['全身 A', ['chest', 'pulldown', 'legs', 'hinge', 'press', 'core']], ['全身 B', ['legs', 'row', 'chest', 'hinge', 'lateral', 'biceps']]] },
+  upperlower: { label: '上半身・下半身', days: [['上半身', ['chest', 'pulldown', 'row', 'press', 'biceps', 'triceps']], ['下半身', ['legs', 'hinge', 'quadiso', 'core']]] },
+  ppl: { label: '押す・引く・脚', days: [['押す日（胸・肩・腕の裏）', ['chest', 'press', 'lateral', 'triceps']], ['引く日（背中・力こぶ）', ['pulldown', 'row', 'biceps', 'core']], ['脚の日', ['legs', 'hinge', 'quadiso', 'core']]] },
+};
+export const MENU_STYLES = { auto: 'おまかせ（レベルに合わせる）', machine: 'マシン中心', free: 'フリーウェイト中心' };
+
+export function splitFor(state) {
+  const m = state.menu || {};
+  if (m.split && m.split !== 'auto' && SPLITS[m.split]) return m.split;
+  const days = state.profile.days || 3;
+  return days >= 5 ? 'ppl' : days === 4 ? 'upperlower' : 'full';
+}
+
+const primaryMuscle = (ex) => Object.entries(ex.muscles || {}).sort((a, b) => b[1] - a[1])[0]?.[0];
+const isFree = (ex) => ex.type === 'dumbbell' || ex.type === 'barbell';
+
+// 枠に入れられる種目の候補（標準の候補＋同じ部位を主に鍛える、自分で追加した種目）
+export function slotCandidates(state, slotKey) {
+  const slot = SLOTS[slotKey];
+  const map = new Map(allExercises(state).map((e) => [e.name, e]));
+  const equip = state.profile.equipment || 'gym';
+  const listed = new Set(state.exercises.map((e) => e.name));
+  const names = [...slot.options, ...state.exercises.filter((e) => e.custom && primaryMuscle(e) === slot.muscle).map((e) => e.name)];
+  return [...new Set(names)]
+    .map((n) => map.get(n))
+    .filter((e) => e && listed.has(e.name) && (e.custom || !e.equip || e.equip.includes(equip)));
+}
+
+function rankCandidates(state, slotKey, list) {
+  const exp = state.profile.experience;
+  const style = state.menu?.style || 'auto';
+  const score = (e) => {
+    if (style === 'machine') return (e.type === 'machine' || e.type === 'cable' ? 0 : 10) + (e.level || 1);
+    if (style === 'free') return (isFree(e) ? 0 : 10) + (e.custom ? -1 : 0);
+    // おまかせ：初心者はマシンなど簡単な種目、中級者は主要な種目でフリーウェイト、上級者はフリーウェイト優先。
+    // 中級者以上は、自分で追加した種目を優先する
+    if (exp === 'beginner') return (e.custom ? 5 : 0) + (e.level || 1) * 2 + (e.type === 'machine' ? 0 : 1);
+    const wantFree = exp === 'advanced' || COMPOUND_SLOTS.includes(slotKey);
+    return (e.custom ? -5 : 0) + (wantFree ? (isFree(e) ? 0 : 3) : (e.level || 1));
+  };
+  return [...list].sort((a, b) => score(a) - score(b));
+}
+
+export function chooseForSlot(state, slotKey) {
+  const list = rankCandidates(state, slotKey, slotCandidates(state, slotKey));
+  if (!list.length) return null;
+  const pinned = state.menu?.pins?.[slotKey];
+  const pick = list.find((e) => e.name === pinned) || list[0];
+  return { exercise: pick.name, alternatives: list.map((e) => e.name), pinned: pick.name === pinned };
+}
+
+export function buildMenu(state, date = today()) {
+  const splitKey = splitFor(state);
+  const split = SPLITS[splitKey];
+  // これまでにトレーニングした日数で、今日がどの日かを決める
+  const done = Object.keys(state.workouts).filter((d) => d < date && state.workouts[d].length).length;
+  const [title, slots] = split.days[done % split.days.length];
+  const p = state.profile;
+  const avoid = new Set(p.avoid || []);
+  let keys = slots.filter((k) => !avoid.has(SLOTS[k].muscle));
+
+  const size = state.menu?.size || (p.experience === 'beginner' ? 5 : 6);
+  keys = keys.slice(0, size);
+  // 足りていない主要な部位が、分け方のどの日にも入っていないときだけ、1つ足す
+  // （押す日・引く日のように別の日に回る部位は、その日に任せる）
+  const inSplit = new Set(split.days.flatMap(([, ks]) => ks.map((k) => SLOTS[k].muscle)));
+  const missing = weakPoints(state, addDays(date, -1)).weak.find((r) => !inSplit.has(r.muscle) && !avoid.has(r.muscle));
+  const extra = missing && Object.keys(SLOTS).find((k) => SLOTS[k].muscle === missing.muscle);
+  if (extra && !keys.includes(extra)) keys.push(extra);
+
+  const t = targetsFor(p);
+  const sets = p.experience === 'beginner' ? 2 : 3;
+  const items = keys.map((k) => {
+    const c = chooseForSlot(state, k);
+    return c && { slot: k, label: SLOTS[k].label, ...c, sets, reps: t.reps };
+  }).filter(Boolean);
+  return { title, split: splitKey, items };
 }
