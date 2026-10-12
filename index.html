@@ -22,55 +22,76 @@
   <main>
     <!-- 記録 -->
     <section id="tab-log" class="tab active">
-      <div class="row">
-        <input type="date" id="log-date" aria-label="日付">
+      <div class="date-nav">
+        <button type="button" id="date-prev" class="icon-btn" aria-label="前の日">‹</button>
+        <label class="date-label">
+          <span id="date-text"></span>
+          <input type="date" id="log-date" aria-label="日付を選ぶ">
+        </label>
+        <button type="button" id="date-next" class="icon-btn" aria-label="次の日">›</button>
       </div>
-      <p id="cycle-info" class="hint hidden"></p>
+      <p id="cycle-info" class="pill hidden"></p>
 
       <form id="add-set-form" class="card">
-        <label>種目
+        <label class="field">種目
           <select id="exercise-select"></select>
         </label>
         <div id="suggestion" class="suggestion hidden"></div>
-        <div class="row">
-          <label>重量 (kg)
-            <input type="number" id="weight" inputmode="decimal" step="0.5" min="0" required>
-          </label>
-          <label>回数
-            <input type="number" id="reps" inputmode="numeric" step="1" min="1" required>
-          </label>
-          <label>余力
-            <select id="rir" aria-describedby="rir-help">
-              <option value="">—</option>
-              <option value="0">0回</option>
-              <option value="1">1回</option>
-              <option value="2">2回</option>
-              <option value="3">3回</option>
-              <option value="4">4回</option>
-              <option value="5">5回以上</option>
-            </select>
-          </label>
+
+        <div class="steppers">
+          <div class="stepper">
+            <span class="stepper-label">重量 <small>kg</small></span>
+            <div class="stepper-ctrl">
+              <button type="button" class="step" data-target="weight" data-delta="-2.5" aria-label="重量を減らす">−</button>
+              <input type="number" id="weight" inputmode="decimal" step="0.5" min="0" required aria-label="重量 (kg)">
+              <button type="button" class="step" data-target="weight" data-delta="2.5" aria-label="重量を増やす">＋</button>
+            </div>
+          </div>
+          <div class="stepper">
+            <span class="stepper-label">回数</span>
+            <div class="stepper-ctrl">
+              <button type="button" class="step" data-target="reps" data-delta="-1" aria-label="回数を減らす">−</button>
+              <input type="number" id="reps" inputmode="numeric" step="1" min="1" required aria-label="回数">
+              <button type="button" class="step" data-target="reps" data-delta="1" aria-label="回数を増やす">＋</button>
+            </div>
+          </div>
         </div>
-        <p id="rir-help" class="hint">余力＝「あと何回できたか」。目安：<span id="rir-target"></span></p>
-        <button type="submit" class="primary">セットを追加</button>
+
+        <div class="field">
+          <span>余力 <small>（あと何回できたか）</small></span>
+          <input type="hidden" id="rir" value="">
+          <div class="chip-row" id="rir-chips" role="radiogroup" aria-label="余力">
+            <button type="button" data-v="0">0</button>
+            <button type="button" data-v="1">1</button>
+            <button type="button" data-v="2">2</button>
+            <button type="button" data-v="3">3</button>
+            <button type="button" data-v="4">4</button>
+            <button type="button" data-v="5">5+</button>
+          </div>
+          <p class="hint" id="rir-target"></p>
+        </div>
+
+        <button type="submit" class="primary big-btn">セットを追加</button>
       </form>
 
-      <div id="timer" class="card timer hidden">
-        <span>休憩</span>
-        <strong id="timer-display">0:00</strong>
-        <button type="button" id="timer-stop">終了</button>
+      <div id="timer" class="timer hidden" role="timer">
+        <div>
+          <span class="timer-label">休憩</span>
+          <strong id="timer-display">0:00</strong>
+        </div>
+        <button type="button" id="timer-stop">スキップ</button>
       </div>
 
       <div id="day-log"></div>
 
       <div class="card">
         <h2>今日の調子</h2>
-        <div class="segmented" id="condition" role="radiogroup" aria-label="今日の調子">
-          <button type="button" data-v="1">😫</button>
-          <button type="button" data-v="2">😕</button>
-          <button type="button" data-v="3">😐</button>
-          <button type="button" data-v="4">🙂</button>
-          <button type="button" data-v="5">💪</button>
+        <div class="chip-row emoji" id="condition" role="radiogroup" aria-label="今日の調子">
+          <button type="button" data-v="1" aria-label="とても悪い">😫</button>
+          <button type="button" data-v="2" aria-label="悪い">😕</button>
+          <button type="button" data-v="3" aria-label="ふつう">😐</button>
+          <button type="button" data-v="4" aria-label="良い">🙂</button>
+          <button type="button" data-v="5" aria-label="とても良い">💪</button>
         </div>
       </div>
     </section>
@@ -82,10 +103,10 @@
 
     <!-- 進捗 -->
     <section id="tab-progress" class="tab">
-      <label>種目
+      <label class="field">種目
         <select id="graph-exercise"></select>
       </label>
-      <div class="segmented" id="metric-select" role="radiogroup">
+      <div class="segmented" id="metric-select" role="radiogroup" aria-label="グラフの指標">
         <button type="button" data-metric="max" class="on">最大重量</button>
         <button type="button" data-metric="e1rm">推定1RM</button>
         <button type="button" data-metric="volume">総挙上量</button>
@@ -105,6 +126,7 @@
 
     <!-- 体 -->
     <section id="tab-body" class="tab">
+      <div id="body-tiles" class="tiles"></div>
       <div class="card">
         <h2>体重</h2>
         <form id="bodyweight-form" class="row">
@@ -136,8 +158,10 @@
       </div>
 
       <a class="card link-card" href="photo.html">
-        <h2>体の写真 →</h2>
-        <p class="hint">前回の写真を重ねて同じ位置で撮り、見た目の変化を比べられます。</p>
+        <div>
+          <h2>体の写真</h2>
+          <p class="hint">前回の写真を重ねて同じ位置で撮り、見た目の変化を比べられます。</p>
+        </div>
       </a>
 
       <div class="card" id="cycle-card"></div>
@@ -269,11 +293,11 @@
   </div>
 
   <nav class="tabbar">
-    <button data-tab="log" class="on">記録</button>
-    <button data-tab="analysis">分析</button>
-    <button data-tab="progress">進捗</button>
-    <button data-tab="body">体</button>
-    <button data-tab="settings">設定</button>
+    <button data-tab="log" class="on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>記録</span></button>
+    <button data-tab="analysis"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>分析</span></button>
+    <button data-tab="progress"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg><span>進捗</span></button>
+    <button data-tab="body"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM5 22l2-9h10l2 9M7 13l-2-4M17 13l2-4"/></svg><span>体</span></button>
+    <button data-tab="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M10 16v4"/></svg><span>設定</span></button>
   </nav>
 
   <script type="module" src="js/app.js"></script>
