@@ -2,7 +2,10 @@ import {
   MUSCLES, EQUIPMENT, DEFAULT_EXERCISES, GOALS, EXPERIENCE, REFS,
   today, addDays, round1, targetsFor, weakPoints, suggestExercises, exerciseHistory,
   stagnation, intensityCheck, nextSuggestion, weightAdvice, proteinTarget, cycleDay,
+  e1rm,
 } from './science.js';
+import { icon, logoMark, hydrateIcons, LOGO_PATH } from './icons.js';
+import { illustration } from './illustrations.js';
 
 const STORAGE_KEY = 'kintore-v1';
 
@@ -261,7 +264,7 @@ function renderSuggestion() {
   $('#reps').value = s.reps;
   const rirText = Number.isFinite(s.last.rir) ? `・余力${s.last.rir}` : '';
   box.replaceChildren(
-    el('div', { class: 'label' }, '今日の提案'),
+    el('div', { class: 'label' }, icon('sparkles'), '今日の提案'),
     el('strong', {}, `${s.weight}kg × ${s.reps}回`),
     el('div', { class: 'prev' }, `前回 ${s.lastDate.slice(5).replace('-', '/')}：${s.last.weight}kg × ${s.last.reps}回${rirText}`),
     el('p', { class: 'hint' }, s.reason),
@@ -278,11 +281,56 @@ $('#add-set-form').addEventListener('submit', (e) => {
   const set = { exercise: $('#exercise-select').value, weight, reps };
   if (rirRaw !== '') set.rir = Number(rirRaw);
   const date = dateInput.value || today();
+  // 追加する前の、この種目のベスト（推定1RM）
+  const before = Object.values(state.workouts).flat().filter((s) => s.exercise === set.exercise);
+  const prevBest = before.length ? Math.max(...before.map((s) => e1rm(s.weight, s.reps))) : null;
   (state.workouts[date] ||= []).push(set);
   save();
   renderLog({ keepInputs: true });
+  animateAddedSet(set.exercise);
+  const now = e1rm(weight, reps);
+  if (prevBest != null && weight > 0 && now > prevBest + 0.05) {
+    celebrate(set.exercise, round1(now), round1(now - prevBest));
+  }
   startTimer();
 });
+
+// 追加したセットを光らせ、ボタンとセット数を少し動かす
+function animateAddedSet(name) {
+  const block = [...document.querySelectorAll('#day-log .exercise-block')].find((b) => b.dataset.name === name);
+  block?.querySelector('.sets li:last-child')?.classList.add('just-added');
+  block?.querySelector('.count')?.classList.add('bump');
+  const btn = $('#add-set-form button[type=submit]');
+  btn.classList.remove('flash');
+  void btn.offsetWidth; // アニメーションをやり直す
+  btn.classList.add('flash');
+}
+
+// 自己ベスト更新のお祝い
+let celebrateTimer = null;
+function celebrate(name, value, diff) {
+  const box = $('#celebrate');
+  const colors = ['#C8102E', '#EF3340', '#111114', '#ffffff', '#F5B700'];
+  const confetti = el('div', { class: 'confetti', 'aria-hidden': 'true' },
+    ...Array.from({ length: 42 }, (_, i) => el('i', {
+      style: `left:${Math.random() * 100}%;background:${colors[i % colors.length]};--x:${(Math.random() - 0.5) * 160}px;--r:${360 + Math.random() * 540}deg;--delay:${Math.random() * 0.35}s;--d:${1.5 + Math.random() * 1.1}s;${i % 3 === 0 ? 'width:6px;height:6px;border-radius:50%;' : ''}`,
+    })),
+  );
+  const close = () => { box.classList.add('hidden'); box.replaceChildren(); clearTimeout(celebrateTimer); };
+  box.replaceChildren(confetti, el('div', { class: 'celebrate-card' },
+    el('div', { class: 'celebrate-badge' }, icon('trophy')),
+    el('div', { class: 'celebrate-kicker' }, 'NEW PERSONAL BEST'),
+    el('div', { class: 'celebrate-title' }, '自己ベスト更新！'),
+    el('div', { class: 'celebrate-value' }, `${value}`, el('small', {}, ' kg')),
+    el('div', { class: 'celebrate-diff' }, `${name}・推定1RM +${diff}kg`),
+    el('p', { class: 'celebrate-sub' }, 'タップで閉じる'),
+  ));
+  box.classList.remove('hidden');
+  box.onclick = close;
+  if (navigator.vibrate) navigator.vibrate([60, 40, 60, 40, 160]);
+  clearTimeout(celebrateTimer);
+  celebrateTimer = setTimeout(close, 3600);
+}
 
 function deleteSet(date, index) {
   state.workouts[date].splice(index, 1);
@@ -309,10 +357,10 @@ function renderLog({ keepInputs = false } = {}) {
   const sets = state.workouts[date] || [];
   const container = $('#day-log');
   if (!sets.length) {
-    container.replaceChildren(el('p', { class: 'empty' }, 'この日の記録はまだありません'));
+    container.replaceChildren(el('div', { class: 'card' }, illustration('barbell', 'この日の記録はまだありません', '種目を選んで「セットを追加」を押しましょう')));
   } else {
     container.replaceChildren(...[...groupByExercise(sets)].map(([name, list]) =>
-      el('div', { class: 'card exercise-block' },
+      el('div', { class: 'card exercise-block', 'data-name': name },
         el('h3', {}, name, el('span', { class: 'count' }, `${list.length}セット`)),
         el('ul', { class: 'sets' }, ...list.map((s, n) =>
           el('li', {},
@@ -415,6 +463,7 @@ renderers.analysis = function renderAnalysis() {
     sub = 'この調子で、重さか回数を少しずつ増やしていきましょう。';
   }
   cards.push(el('div', { class: 'card hero' },
+    logoMark('logo-mark hero-mark'),
     el('h2', {}, `今週の分析・${GOALS[p.goal].short}`),
     el('p', { class: 'headline' }, headline),
     el('p', {}, sub),
@@ -449,7 +498,7 @@ renderers.analysis = function renderAnalysis() {
   }
   cards.push(el('div', { class: 'card' },
     el('h2', {}, '改善ポイント'),
-    !hasData ? el('p', { class: 'empty' }, '直近7日の記録がありません')
+    !hasData ? illustration('chart', '直近7日の記録がありません', '記録すると、ここに改善ポイントが出ます')
       : items.length ? el('ul', { class: 'advice' }, ...items)
         : el('ul', { class: 'advice' }, el('li', { class: 'good' }, el('strong', {}, '気になるところはありません'), el('p', { class: 'hint' }, '主な部位はすべて目安の範囲です。'))),
     evidence('volume', 'frequency', 'progression'),
@@ -473,7 +522,8 @@ renderers.analysis = function renderAnalysis() {
     el('div', { class: 'legend' },
       el('span', {}, el('i', { style: 'background:color-mix(in srgb, var(--accent) 25%, transparent)' }), '目安の範囲'),
       el('span', {}, el('i', { style: 'background:var(--accent)' }), '十分'),
-      el('span', {}, el('i', { style: 'background:var(--danger)' }), '不足'),
+      el('span', {}, el('i', { style: 'background:var(--low)' }), '不足'),
+      el('span', {}, el('i', { style: 'background:var(--high)' }), '多すぎ'),
       el('span', {}, el('i', { style: 'background:var(--muted)' }), '補助の部位'),
     ),
     el('p', { class: 'hint' }, '直近7日。補助的に使った部位は 0.5 セットとして数えています。'),
@@ -547,7 +597,7 @@ function renderGraph() {
   const points = exerciseHistory(state.workouts, $('#graph-exercise').value).map((h) => ({ date: h.date, value: round1(h[metric]) }));
   const container = $('#graph');
   if (!points.length) {
-    container.replaceChildren(el('p', { class: 'empty' }, 'この種目の記録はまだありません'));
+    container.replaceChildren(illustration('line', 'この種目の記録はまだありません', '記録が増えると、伸びがグラフでわかります'));
     return;
   }
   const first = points[0].value, last = points.at(-1).value;
@@ -566,7 +616,7 @@ function renderHistory() {
   const dates = Object.keys(state.workouts).sort().reverse();
   const container = $('#history-list');
   if (!dates.length) {
-    container.replaceChildren(el('p', { class: 'empty' }, 'まだ記録がありません'));
+    container.replaceChildren(el('div', { class: 'card' }, illustration('calendar', 'まだ記録がありません', '記録した日が、ここに並びます')));
     return;
   }
   container.replaceChildren(...dates.map((d) => {
@@ -604,9 +654,9 @@ $('#share-week').addEventListener('click', async () => {
   const c = document.createElement('canvas');
   c.width = 1080; c.height = 1350;
   const g = c.getContext('2d');
-  const font = (size, weight = 400) => `${weight} ${size}px system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif`;
-  g.fillStyle = '#0f1115'; g.fillRect(0, 0, c.width, c.height);
-  g.fillStyle = '#22c55e'; g.font = font(44, 700); g.fillText('今週の筋トレ', 80, 130);
+  const font = (size, weight = 400) => `${weight} ${size}px "M PLUS 1", system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif`;
+  g.fillStyle = '#0E0E10'; g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = '#EF3340'; g.font = font(44, 700); g.fillText('今週の筋トレ', 80, 130);
   g.fillStyle = '#9ca3af'; g.font = font(32); g.fillText(`${formatDate(from)} 〜 ${formatDate(end)}`, 80, 185);
   g.fillStyle = '#f3f4f6'; g.font = font(120, 700); g.fillText(`${days.length}日`, 80, 350);
   g.font = font(40); g.fillStyle = '#9ca3af'; g.fillText(`合計 ${totalSets} セット`, 420, 350);
@@ -618,16 +668,22 @@ $('#share-week').addEventListener('click', async () => {
     const y = 510 + i * 70;
     g.font = font(32); g.fillStyle = '#d1d5db'; g.fillText(MUSCLES[r.muscle], 80, y + 34);
     g.fillStyle = '#1f2937'; g.fillRect(320, y + 8, 560, 32);
-    g.fillStyle = '#22c55e'; g.fillRect(320, y + 8, (560 * r.sets) / maxV, 32);
+    g.fillStyle = '#EF3340'; g.fillRect(320, y + 8, (560 * r.sets) / maxV, 32);
     g.fillStyle = '#f3f4f6'; g.fillText(String(r.sets), 900, y + 34);
   });
 
   const prY = 510 + Math.max(shown.length, 1) * 70 + 60;
   g.font = font(36, 700); g.fillStyle = '#f3f4f6'; g.fillText('自己ベスト更新', 80, prY);
-  g.font = font(32); g.fillStyle = prs.length ? '#22c55e' : '#9ca3af';
+  g.font = font(32); g.fillStyle = prs.length ? '#EF3340' : '#9ca3af';
   (prs.length ? prs.slice(0, 4) : ['今週はなし。次は更新しよう！']).forEach((t, i) => g.fillText(t, 80, prY + 55 + i * 50));
 
-  g.font = font(28); g.fillStyle = '#6b7280'; g.fillText('筋トレ記録', 80, 1290);
+  // ロゴ
+  g.save();
+  g.translate(80, 1210); g.scale(96 / 512, 96 / 512);
+  g.fillStyle = '#C8102E'; g.beginPath(); g.roundRect(0, 0, 512, 512, 112); g.fill();
+  g.fillStyle = '#ffffff'; g.fill(new Path2D(LOGO_PATH));
+  g.restore();
+  g.font = `600 30px Oswald, sans-serif`; g.fillStyle = '#F4F4F5'; g.fillText('K O K O R O Z A S H I', 196, 1270);
 
   const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
   const file = new File([blob], `kintore-${end}.png`, { type: 'image/png' });
@@ -693,7 +749,7 @@ function renderBody() {
     evidence('weightRate', ...(state.profile.sex === 'female' ? ['sex'] : [])),
   );
   const recent = bwDates.slice(-60).map((d) => ({ date: d, value: state.bodyweights[d] }));
-  $('#bw-graph').replaceChildren(...(recent.length >= 2 ? [lineChart(recent, 'kg')] : []));
+  $('#bw-graph').replaceChildren(recent.length >= 2 ? lineChart(recent, 'kg') : illustration('scale', '体重を2日分記録すると、グラフが出ます', '毎朝、同じ条件ではかるのがおすすめです'));
 
   // たんぱく質
   const pt = proteinTarget(state);
@@ -859,6 +915,7 @@ function refreshAll() {
   renderers[active]?.();
 }
 
+hydrateIcons();
 refreshAll();
 if (!state.profile.onboarded) setupOnboarding();
 
