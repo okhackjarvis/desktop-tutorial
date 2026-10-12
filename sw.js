@@ -1,6 +1,6 @@
 // オフライン対応：通信できるときは最新を取得してキャッシュを更新し、
 // 通信できないときはキャッシュから返す
-const CACHE = 'kokorozashi-v9';
+const CACHE = 'will-v10';
 const ASSETS = [
   './', 'index.html', 'style.css', 'js/app.js', 'js/science.js',
   'photo.html', 'photo.css', 'photo.js', 'manifest.webmanifest',

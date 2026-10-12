@@ -1,4 +1,4 @@
-# 志
+# WILL
 
 科学で鍛える筋トレ記録アプリ。
 
@@ -25,7 +25,7 @@ AI による食事アドバイスは準備中です（サーバーと AI の利�
 | `js/app.js` | 画面の処理 |
 | `js/science.js` | 研究に基づく目安・分析ロジック（画面に依存しない関数） |
 | `photo.html` / `photo.js` / `photo.css` | 体の写真の撮影と比較 |
-| `js/icons.js` | アイコン（Lucide）と志のロゴ |
+| `js/icons.js` | アイコン（Lucide）とロゴ |
 | `js/illustrations.js` | 記録がない画面のイラスト |
 | `sw.js` / `manifest.webmanifest` / `icons/` | PWA（オフライン対応・ホーム画面のアイコン） |
 
@@ -44,7 +44,7 @@ python3 -m http.server 8000
 
 ## ブランド
 
-- ロゴ：漢字「志」（ChatGPT の画像生成で作成。`icons/` に各サイズ）
-- ブランドカラー：志レッド `#C8102E`（ダークモードでは `#EF3340`）
+- ロゴ：「WILL」（ChatGPT の画像生成で作成。`icons/` に各サイズ）
+- 配色：黒基調＋赤 `#E3132C`（ロゴに合わせて常に黒基調）
 - フォント：M PLUS 1（本文・見出し）、Oswald（数字）。Google Fonts から読み込み
 - アイコン：[Lucide](https://lucide.dev)（ISC License）

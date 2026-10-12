@@ -870,7 +870,7 @@ $('#share-week').addEventListener('click', async () => {
     g.drawImage(logo, 80, 1210, 96, 96);
     g.restore();
   } catch { /* ロゴが読めなくても画像は作る */ }
-  g.font = font(34, 800); g.fillStyle = '#F4F4F5'; g.fillText('志', 196, 1252);
+  g.font = font(34, 800); g.fillStyle = '#F4F4F5'; g.fillText('WILL', 196, 1252);
   g.font = font(24, 500); g.fillStyle = '#9A9AA6'; g.fillText('科学で鍛える筋トレ記録', 196, 1290);
 
   const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
