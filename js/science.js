@@ -217,8 +217,9 @@ export function weakPoints(state, endDate = today()) {
 // 弱い部位を鍛えられる種目を、器具の条件に合わせて提案する
 export function suggestExercises(state, muscle, n = 3) {
   const equip = state.profile.equipment || 'gym';
-  return allExercises(state)
-    .filter((e) => (e.muscles[muscle] || 0) >= 1 && (!e.equip || e.equip.includes(equip)))
+  // 今の種目リストにある種目だけを提案する
+  return state.exercises
+    .filter((e) => (e.muscles[muscle] || 0) >= 1 && (e.custom || !e.equip || e.equip.includes(equip)))
     .slice(0, n).map((e) => e.name);
 }
 
