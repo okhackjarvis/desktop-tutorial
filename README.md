@@ -43,7 +43,7 @@ python3 -m http.server 8000
 
 ## ブランド
 
-- ロゴ：漢字「志」（M PLUS 1 Black の字形をもとにした図形。SIL Open Font License）
+- ロゴ：漢字「志」（ChatGPT の画像生成で作成。`icons/` に各サイズ）
 - ブランドカラー：志レッド `#C8102E`（ダークモードでは `#EF3340`）
 - フォント：M PLUS 1（本文・見出し）、Oswald（数字）。Google Fonts から読み込み
 - アイコン：[Lucide](https://lucide.dev)（ISC License）

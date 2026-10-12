@@ -4,7 +4,7 @@ import {
   stagnation, intensityCheck, nextSuggestion, weightAdvice, proteinTarget, cycleDay,
   e1rm,
 } from './science.js';
-import { icon, hydrateIcons, LOGO_PATH } from './icons.js';
+import { icon, hydrateIcons, LOGO_SRC } from './icons.js';
 import { illustration } from './illustrations.js';
 
 const STORAGE_KEY = 'kintore-v1';
@@ -670,11 +670,15 @@ $('#share-week').addEventListener('click', async () => {
   (prs.length ? prs.slice(0, 4) : ['今週はなし。次は更新しよう！']).forEach((t, i) => g.fillText(t, 80, prY + 55 + i * 50));
 
   // ロゴ
-  g.save();
-  g.translate(80, 1210); g.scale(96 / 512, 96 / 512);
-  g.fillStyle = '#C8102E'; g.beginPath(); g.roundRect(0, 0, 512, 512, 112); g.fill();
-  g.fillStyle = '#ffffff'; g.fill(new Path2D(LOGO_PATH));
-  g.restore();
+  const logo = new Image();
+  logo.src = LOGO_SRC;
+  try {
+    await logo.decode();
+    g.save();
+    g.beginPath(); g.roundRect(80, 1210, 96, 96, 22); g.clip();
+    g.drawImage(logo, 80, 1210, 96, 96);
+    g.restore();
+  } catch { /* ロゴが読めなくても画像は作る */ }
   g.font = font(34, 800); g.fillStyle = '#F4F4F5'; g.fillText('志', 196, 1252);
   g.font = font(24, 500); g.fillStyle = '#9A9AA6'; g.fillText('科学で鍛える筋トレ記録', 196, 1290);
 
