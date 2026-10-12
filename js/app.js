@@ -1,11 +1,12 @@
 import {
   MUSCLES, EQUIPMENT, DEFAULT_EXERCISES, GOALS, EXPERIENCE, REFS,
   today, addDays, round1, targetsFor, weakPoints, suggestExercises, exerciseHistory,
-  stagnation, intensityCheck, nextSuggestion, weightAdvice, proteinTarget, cycleDay,
+  stagnation, intensityCheck, weightAdvice, proteinTarget, cycleDay, setPlan, restFor, workSets,
   e1rm, LEGACY_EXERCISES, SPLITS, MENU_STYLES, buildMenu,
 } from './science.js';
 import { icon, hydrateIcons, LOGO_SRC } from './icons.js';
 import { illustration } from './illustrations.js';
+import { tipsFor } from './tips.js';
 
 const STORAGE_KEY = 'kintore-v1';
 
@@ -30,7 +31,7 @@ function loadState() {
 }
 
 // 種目リストの版。標準の種目を入れ替えたときに上げる
-const CATALOG = 2;
+const CATALOG = 3;
 
 function normalize(s) {
   const defaults = new Map([...LEGACY_EXERCISES, ...DEFAULT_EXERCISES].map((e) => [e.name, e]));
@@ -62,7 +63,9 @@ function normalize(s) {
     measurements: obj(s.measurements),
     conditions: obj(s.conditions),
     periods: Array.isArray(s.periods) ? s.periods : [],
-    settings: { rest },
+    settings: { sound: true, vibe: true, warn: true, warmup: true, ...obj(s.settings), rest },
+    notes: obj(s.notes),
+    exNotes: obj(s.exNotes),
     menu: { enabled: true, split: 'auto', style: 'auto', size: null, pins: {}, ...obj(s.menu) },
     catalog: CATALOG,
   };
@@ -387,14 +390,13 @@ function renderMenu() {
   card.classList.toggle('hidden', !m);
   if (!m) return;
   const date = dateInput.value || today();
-  const doneSets = (name) => (state.workouts[date] || []).filter((x) => x.exercise === name).length;
   const beginner = state.profile.experience === 'beginner' && (state.menu.style || 'auto') === 'auto';
   card.replaceChildren(
     el('div', { class: 'menu-head' },
       el('h2', {}, icon('target'), '今日のメニュー'),
       el('span', { class: 'badge' }, m.title)),
     el('ul', { class: 'menu-list' }, ...m.items.map((it) => {
-      const done = doneSets(it.exercise);
+      const done = doneSets(date, it.exercise);
       const complete = done >= it.sets;
       const alts = it.alternatives;
       return el('li', { class: `menu-item${complete ? ' done' : ''}${$('#exercise-select').value === it.exercise ? ' current' : ''}` },
@@ -415,7 +417,7 @@ function renderMenu() {
         }, icon('repeat')) : null,
       );
     })),
-    beginner ? el('p', { class: 'hint' }, '初心者のうちは、動きが決まっていてフォームを覚えやすいマシン中心のメニューにしています。') : null,
+    ...(beginner ? [el('p', { class: 'hint' }, '初心者のうちは、動きが決まっていてフォームを覚えやすいマシン中心のメニューにしています。')] : []),
     evidence('machines', 'split'),
   );
 }
@@ -439,28 +441,109 @@ document.querySelectorAll('#rir-chips button').forEach((b) => b.addEventListener
   document.querySelectorAll('#rir-chips button').forEach((x) => x.classList.toggle('on', x.dataset.v === v));
 }));
 
-// 前回の記録から次の重量・回数を提案し、入力欄にも入れておく
-function renderSuggestion() {
-  const name = $('#exercise-select').value;
-  const box = $('#suggestion');
-  const s = nextSuggestion(state, name, dateInput.value || today());
-  if (!s) {
-    box.classList.add('hidden');
-    $('#weight').value = '';
-    $('#reps').value = '';
-    return;
-  }
-  $('#weight').value = s.weight;
-  $('#reps').value = s.reps;
-  const rirText = Number.isFinite(s.last.rir) ? `・余力${s.last.rir}` : '';
-  box.replaceChildren(
-    el('div', { class: 'label' }, icon('sparkles'), '今日の提案'),
-    el('strong', {}, `${s.weight}kg × ${s.reps}回`),
-    el('div', { class: 'prev' }, `前回 ${s.lastDate.slice(5).replace('-', '/')}：${s.last.weight}kg × ${s.last.reps}回${rirText}`),
-    el('p', { class: 'hint' }, s.reason),
-  );
-  box.classList.remove('hidden');
+// ---------- 今日のセットの計画・アップ・左右 ----------
+let side = '右';
+
+// その日に終えた本番のセット数（アップは数えず、左右別の種目は左まで終えて1セット）
+function doneSets(date, name) {
+  return workSets(state.workouts[date]).filter((x) => x.exercise === name && x.side !== '右').length;
 }
+
+function currentExercise() {
+  return state.exercises.find((e) => e.name === $('#exercise-select').value) || { name: $('#exercise-select').value, muscles: {} };
+}
+
+function plannedSetsFor(name) {
+  return currentMenu()?.items.find((i) => i.exercise === name)?.sets || null;
+}
+
+function setSide(v) {
+  side = v;
+  document.querySelectorAll('#sides button').forEach((b) => b.classList.toggle('on', b.dataset.side === v));
+}
+document.querySelectorAll('#sides button').forEach((b) => b.addEventListener('click', () => setSide(b.dataset.side)));
+
+// 前回の記録から今日の各セットの重量・回数を決め、今やるセットを入力欄に入れる
+function renderSuggestion({ keepInputs = false } = {}) {
+  const name = $('#exercise-select').value;
+  const date = dateInput.value || today();
+  const ex = currentExercise();
+  const box = $('#suggestion');
+  const planned = plannedSetsFor(name);
+  const plan = setPlan(state, name, date, planned);
+  const done = doneSets(date, name);
+
+  // 左右別の種目
+  $('#sides').classList.toggle('hidden', !ex.sides);
+  if (!ex.sides) setSide('右');
+
+  if (plan) {
+    const cur = plan.sets[Math.min(done, plan.sets.length - 1)];
+    if (!keepInputs || done < plan.sets.length) {
+      $('#weight').value = cur.weight;
+      $('#reps').value = cur.reps;
+    }
+    const lastTxt = plan.last.map((x) => `${x.weight}×${x.reps}${Number.isFinite(x.rir) ? `(余力${x.rir})` : ''}`).join('、');
+    box.replaceChildren(
+      el('div', { class: 'label' }, icon('sparkles'), '今日の目標（漸進性過負荷）'),
+      el('ol', { class: 'plan-sets' }, ...plan.sets.map((p, i) =>
+        el('li', { class: i < done ? 'done' : i === done ? 'now' : '' },
+          el('span', { class: 'ps-no' }, `${i + 1}`),
+          el('span', { class: 'ps-main' }, `${p.weight}kg × ${p.reps}回`)))),
+      el('div', { class: 'prev' }, `前回 ${plan.date.slice(5).replace('-', '/')}：${lastTxt}`),
+      el('p', { class: 'hint' }, plan.reason),
+    );
+    box.classList.remove('hidden');
+  } else {
+    box.classList.add('hidden');
+    if (!keepInputs) { $('#weight').value = ''; $('#reps').value = ''; }
+  }
+
+  // 最後のセットかどうか（予定のセット数に届くとき）
+  const total = plan?.sets.length || planned;
+  $('#last-set').checked = !!total && done + 1 >= total;
+
+  // アップ：その日まだ本番をしていない種目で、本番の重さがわかるとき（本番の約60%）
+  const work = parseFloat($('#weight').value);
+  const warmedUp = (state.workouts[date] || []).some((x) => x.exercise === name);
+  const showWarm = state.settings.warmup !== false && !warmedUp && work >= 20;
+  $('#warmup').classList.toggle('hidden', !showWarm);
+  if (showWarm) {
+    const w = Math.round((work * 0.6) / 2.5) * 2.5;
+    $('#warmup-text').textContent = `${w}kg × 10回`;
+    $('#warmup').dataset.weight = w;
+  }
+
+  // 気をつけること・種目のメモ
+  const tips = tipsFor(name);
+  $('#tips').classList.toggle('hidden', !tips);
+  if (tips) {
+    $('#tips-list').replaceChildren(...tips.map((t) => el('li', {}, t)));
+    $('#tips').open = state.profile.experience === 'beginner' && done === 0;
+  }
+  $('#ex-note').value = state.exNotes[name] || '';
+}
+
+$('#warmup-done').addEventListener('click', () => {
+  const name = $('#exercise-select').value;
+  const date = dateInput.value || today();
+  const weight = Number($('#warmup').dataset.weight) || 0;
+  (state.workouts[date] ||= []).push({ exercise: name, weight, reps: 10, warmup: true });
+  save();
+  renderLog({ keepInputs: true });
+  startTimer(60, `${name}（アップ後）`);
+});
+
+let exNoteTimer = null;
+$('#ex-note').addEventListener('input', (e) => {
+  const name = $('#exercise-select').value;
+  clearTimeout(exNoteTimer);
+  exNoteTimer = setTimeout(() => {
+    const v = e.target.value.trim();
+    if (v) state.exNotes[name] = v; else delete state.exNotes[name];
+    save();
+  }, 400);
+});
 
 $('#add-set-form').addEventListener('submit', (e) => {
   e.preventDefault();
@@ -468,21 +551,29 @@ $('#add-set-form').addEventListener('submit', (e) => {
   const reps = parseInt($('#reps').value, 10);
   if (!(weight >= 0) || !(reps >= 1)) return;
   const rirRaw = $('#rir').value;
-  const set = { exercise: $('#exercise-select').value, weight, reps };
+  const ex = currentExercise();
+  const set = { exercise: ex.name, weight, reps };
   if (rirRaw !== '') set.rir = Number(rirRaw);
+  const firstSide = !!ex.sides && side === '右';
+  if (ex.sides) set.side = side;
+  const last = $('#last-set').checked;
   const date = dateInput.value || today();
-  // 追加する前の、この種目のベスト（推定1RM）
-  const before = Object.values(state.workouts).flat().filter((s) => s.exercise === set.exercise);
+  // 追加する前の、この種目のベスト（推定1RM。アップは除く）
+  const before = Object.values(state.workouts).flatMap(workSets).filter((s) => s.exercise === set.exercise);
   const prevBest = before.length ? Math.max(...before.map((s) => e1rm(s.weight, s.reps))) : null;
   (state.workouts[date] ||= []).push(set);
   save();
-  renderLog({ keepInputs: true });
+  if (ex.sides) setSide(firstSide ? '左' : '右');
+  renderLog();
   animateAddedSet(set.exercise);
   const now = e1rm(weight, reps);
   if (prevBest != null && weight > 0 && now > prevBest + 0.05) {
     celebrate(set.exercise, round1(now), round1(now - prevBest));
   }
-  startTimer();
+  // 片側目のあとは1分、最後のセットのあとは種目間の1分30秒、それ以外は種目ごとの休憩
+  if (firstSide) startTimer(60, `${ex.name}（反対側へ）`);
+  else if (last) startTimer(90, '種目間の休憩');
+  else startTimer(restFor(state, ex.name), ex.name);
 });
 
 // 追加したセットを光らせ、ボタンとセット数を少し動かす
@@ -544,11 +635,12 @@ function renderLog({ keepInputs = false } = {}) {
   } else {
     container.replaceChildren(...[...groupByExercise(sets)].map(([name, list]) =>
       el('div', { class: 'card exercise-block', 'data-name': name },
-        el('h3', {}, name, el('span', { class: 'count' }, `${list.length}セット`)),
+        el('h3', {}, name, el('span', { class: 'count' }, `${list.filter((x) => !x.warmup && x.side !== '右').length}セット`)),
         el('ul', { class: 'sets' }, ...list.map((s, n) =>
-          el('li', {},
-            el('span', { class: 'no' }, String(n + 1)),
-            el('span', { class: 'main' }, `${s.weight}`, el('small', {}, ' kg'), ` × ${s.reps}`, el('small', {}, ' 回')),
+          el('li', { class: s.warmup ? 'warm' : '' },
+            el('span', { class: 'no' }, s.warmup ? 'W' : String(list.filter((x, i) => i <= n && !x.warmup && x.side !== '右').length || 1)),
+            el('span', { class: 'main' }, `${s.weight}`, el('small', {}, ' kg'), ` × ${s.reps}`, el('small', {}, ' 回'),
+              s.warmup ? el('small', { class: 'tag' }, 'アップ') : null, s.side ? el('small', { class: 'tag' }, s.side) : null),
             Number.isFinite(s.rir) ? el('span', { class: 'rir' }, `余力${s.rir}`) : el('span'),
             el('button', { class: 'del', type: 'button', 'aria-label': `${n + 1}セット目を削除`, onclick: () => deleteSet(date, s.index) }, '×'),
           ),
@@ -566,7 +658,9 @@ function renderLog({ keepInputs = false } = {}) {
   if (day) info.textContent = `生理周期 ${day}日目`;
 
   // セットを追加した直後は、入力した重量・回数をそのまま残す（次のセットも同じことが多いため）
-  if (!keepInputs) renderSuggestion();
+  renderSuggestion({ keepInputs });
+  renderStreak();
+  $('#day-note').value = state.notes[date] || '';
   renderMenu();
 }
 
@@ -580,37 +674,184 @@ document.querySelectorAll('#condition button').forEach((b) => b.addEventListener
 }));
 
 // ---------- 休憩タイマー ----------
-let timerId = null;
+const DIAL_C = 2 * Math.PI * 90;
+const T = { running: false, endAt: 0, total: 0, remaining: 0, warned: false, tick: null, label: '休憩' };
+let audio = null, wakeLock = null;
+$('#dial-ring').style.strokeDasharray = DIAL_C;
 
-function startTimer() {
-  stopTimer();
-  const total = Number(restSeconds()) || 0;
-  if (total <= 0) return;
-  const endAt = Date.now() + total * 1000;
+const fmtSec = (s) => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+
+// 音：一度タップすると使えるようになる（iPhone は無音を一度鳴らす）
+function ensureAudio() {
+  if (!audio) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) { try { audio = new AC(); } catch { audio = null; } }
+  }
+  if (audio && audio.state !== 'running') audio.resume().then(updateSoundState, updateSoundState);
+  if (audio) {
+    try {
+      const b = audio.createBuffer(1, 1, 22050), src = audio.createBufferSource();
+      src.buffer = b; src.connect(audio.destination); src.start(0);
+    } catch { /* 無視 */ }
+  }
+  updateSoundState();
+}
+function soundReady() { return !!audio && audio.state === 'running'; }
+function updateSoundState() {
+  $('#sound-off').classList.toggle('hidden', !(T.running && state.settings.sound && !soundReady()));
+}
+['pointerdown', 'touchend', 'keydown'].forEach((t) => document.addEventListener(t, () => { if (state.settings.sound) ensureAudio(); }, { passive: true }));
+
+function beep(freq, dur, when = 0) {
+  if (!audio || !state.settings.sound) return;
+  const t = audio.currentTime + when;
+  const o = audio.createOscillator(), g = audio.createGain();
+  o.type = 'square'; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.35, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(audio.destination);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function vibrate(pattern) {
+  if (state.settings.vibe && navigator.vibrate) { try { navigator.vibrate(pattern); } catch { /* 無視 */ } }
+}
+function requestWake() {
+  navigator.wakeLock?.request?.('screen').then((l) => { wakeLock = l; }).catch(() => {});
+}
+function releaseWake() {
+  if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+}
+
+function renderTimer() {
   const box = $('#timer');
-  box.classList.remove('hidden', 'done');
-  const tick = () => {
-    const left = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
-    $('#timer-display').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
-    if (left === 0) {
-      clearInterval(timerId);
-      timerId = null;
-      box.classList.add('done');
-      $('#timer-display').textContent = '次のセットへ';
-      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-    }
-  };
-  tick();
-  timerId = setInterval(tick, 250);
+  const finished = !T.running && T.remaining <= 0;
+  $('#timer-display').textContent = fmtSec(T.remaining);
+  $('#timer-label').textContent = T.label;
+  const frac = T.total > 0 ? Math.max(0, T.remaining) / T.total : 0;
+  $('#dial-ring').style.strokeDashoffset = DIAL_C * (1 - frac);
+  $('#dial').classList.toggle('finished', finished);
+  $('#timer-banner').classList.toggle('hidden', !finished);
+  $('#timer-toggle').textContent = T.running ? '一時停止' : finished ? 'もう一度' : '再開';
+  document.title = T.running ? `${fmtSec(T.remaining)} WILL` : 'WILL | 科学で鍛える筋トレ記録';
+  box.classList.remove('hidden');
+  updateSoundState();
+}
+
+function timerLoop() {
+  T.remaining = (T.endAt - Date.now()) / 1000;
+  if (state.settings.warn && !T.warned && T.remaining <= 20 && T.remaining > 0) {
+    T.warned = true; beep(660, 0.12); vibrate(80);
+  }
+  if (T.remaining <= 0) { finishTimer(); return; }
+  renderTimer();
+}
+
+function startTimer(sec, label = '休憩') {
+  if (typeof sec === 'number') { T.total = sec; T.remaining = sec; T.label = label; }
+  if (!(T.total > 0)) return;
+  if (T.remaining <= 0) T.remaining = T.total;
+  if (state.settings.sound) ensureAudio();
+  T.endAt = Date.now() + T.remaining * 1000;
+  T.warned = T.remaining <= 20;
+  T.running = true;
+  clearInterval(T.tick);
+  T.tick = setInterval(timerLoop, 200);
+  requestWake();
+  renderTimer();
+  $('#timer').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function pauseTimer() {
+  T.running = false;
+  clearInterval(T.tick);
+  T.remaining = Math.max(0, (T.endAt - Date.now()) / 1000);
+  releaseWake();
+  renderTimer();
+}
+
+function finishTimer() {
+  T.running = false;
+  clearInterval(T.tick);
+  T.remaining = 0;
+  beep(880, 0.18, 0); beep(880, 0.18, 0.28); beep(1175, 0.45, 0.56);
+  vibrate([300, 150, 300, 150, 500]);
+  releaseWake();
+  renderTimer();
+}
+
+function adjustTimer(delta) {
+  if (T.running) {
+    T.endAt += delta * 1000;
+    T.total = Math.max(T.total + delta, 1);
+    T.remaining = (T.endAt - Date.now()) / 1000;
+    T.warned = T.remaining <= 20;
+    if (T.remaining <= 0) { finishTimer(); return; }
+  } else {
+    T.remaining = Math.max(0, T.remaining + delta);
+    T.total = Math.max(T.total + delta, 15);
+    if (T.remaining > T.total) T.total = T.remaining;
+  }
+  renderTimer();
 }
 
 function stopTimer() {
-  if (timerId) clearInterval(timerId);
-  timerId = null;
+  T.running = false;
+  clearInterval(T.tick);
+  releaseWake();
   $('#timer').classList.add('hidden');
+  $('#sound-off').classList.add('hidden');
+  document.title = 'WILL | 科学で鍛える筋トレ記録';
 }
 
+$('#timer-toggle').addEventListener('click', () => (T.running ? pauseTimer() : startTimer()));
+$('#timer-plus').addEventListener('click', () => adjustTimer(15));
+$('#timer-minus').addEventListener('click', () => adjustTimer(-15));
 $('#timer-stop').addEventListener('click', stopTimer);
+$('#dial').addEventListener('click', () => { if (!T.running && T.remaining <= 0) stopTimer(); });
+$('#sound-off').addEventListener('click', ensureAudio);
+$('#sound-gate').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); ensureAudio(); $('#sound-gate').classList.add('hidden'); });
+
+// アプリに戻ってきたとき：時間を合わせ直し、音がオフなら「タップして音をオン」を出す
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    if (T.running) { requestWake(); timerLoop(); }
+    setTimeout(() => {
+      if (T.running && state.settings.sound && !soundReady()) $('#sound-gate').classList.remove('hidden');
+    }, 300);
+  }
+});
+
+// ---------- 続けている日数・メモ ----------
+function renderStreak() {
+  const days = Object.keys(state.workouts).filter((d) => workSets(state.workouts[d]).length);
+  const monday = (iso) => { const [y, m, d] = iso.split('-').map(Number); const x = new Date(y, m - 1, d); return addDays(iso, -((x.getDay() + 6) % 7)); };
+  const weeks = new Set(days.map(monday));
+  const thisMon = monday(today());
+  let streak = 0;
+  let w = weeks.has(thisMon) ? thisMon : addDays(thisMon, -7);
+  while (weeks.has(w)) { streak++; w = addDays(w, -7); }
+  const thisWeek = days.filter((d) => monday(d) === thisMon).length;
+  $('#streak').replaceChildren(
+    el('span', {}, '今週 ', el('b', {}, String(thisWeek)), '日'),
+    el('span', {}, '連続 ', el('b', {}, String(streak)), '週'),
+    el('span', {}, '通算 ', el('b', {}, String(days.length)), '日'),
+  );
+}
+
+let dayNoteTimer = null;
+$('#day-note').addEventListener('input', (e) => {
+  const date = dateInput.value || today();
+  clearTimeout(dayNoteTimer);
+  dayNoteTimer = setTimeout(() => {
+    const v = e.target.value.trim();
+    if (v) state.notes[date] = e.target.value; else delete state.notes[date];
+    save();
+    $('#day-note-saved').textContent = '保存しました';
+    setTimeout(() => { $('#day-note-saved').textContent = ''; }, 1500);
+  }, 500);
+});
+
 
 // ---------- 分析 ----------
 function tile(label, value, sub, cls = '') {
@@ -630,7 +871,7 @@ renderers.analysis = function renderAnalysis() {
   const end = today();
   const from = addDays(end, -6);
   const days = Object.keys(state.workouts).filter((d) => d >= from && d <= end);
-  const totalSets = days.reduce((n, d) => n + state.workouts[d].length, 0);
+  const totalSets = days.reduce((n, d) => n + workSets(state.workouts[d]).length, 0);
   const hasData = totalSets > 0;
   const cards = [];
 
@@ -803,7 +1044,7 @@ function renderHistory() {
     return;
   }
   container.replaceChildren(...dates.map((d) => {
-    const summary = [...groupByExercise(state.workouts[d])].map(([name, list]) => `${name} ${list.length}セット`).join('・');
+    const summary = [...groupByExercise(workSets(state.workouts[d]))].map(([name, list]) => `${name} ${list.length}セット`).join('・');
     return el('button', { type: 'button', class: 'card history-day', onclick: () => { dateInput.value = d; showTab('log'); } },
       el('span', { style: 'text-align:left' },
         el('span', { class: 'date', style: 'display:block' }, formatDate(d)),
@@ -821,7 +1062,7 @@ $('#share-week').addEventListener('click', async () => {
   const from = addDays(end, -6);
   const { rows } = weakPoints(state, end);
   const days = Object.keys(state.workouts).filter((d) => d >= from && d <= end);
-  const totalSets = days.reduce((n, d) => n + state.workouts[d].length, 0);
+  const totalSets = days.reduce((n, d) => n + workSets(state.workouts[d]).length, 0);
   // 今週、自己ベスト（推定1RM）を更新した種目
   const prs = [];
   for (const ex of state.exercises) {
@@ -1019,6 +1260,15 @@ function renderSettings() {
   }));
 }
 
+function renderTimerSettings() {
+  for (const [id, key] of [['#opt-sound', 'sound'], ['#opt-vibe', 'vibe'], ['#opt-warn', 'warn'], ['#opt-warmup', 'warmup']]) {
+    $(id).checked = state.settings[key] !== false;
+  }
+}
+for (const [id, key] of [['#opt-sound', 'sound'], ['#opt-vibe', 'vibe'], ['#opt-warn', 'warn'], ['#opt-warmup', 'warmup']]) {
+  $(id).addEventListener('change', (e) => { state.settings[key] = e.target.checked; save(); if (key === 'sound' && e.target.checked) ensureAudio(); });
+}
+
 function renderMenuSettings() {
   const m = state.menu;
   $('#mn-enabled').checked = !!m.enabled;
@@ -1043,7 +1293,7 @@ $('#mn-style').addEventListener('change', (e) => { state.menu.style = e.target.v
 $('#mn-size').addEventListener('change', (e) => { state.menu.size = Number(e.target.value) || null; save(); renderMenu(); });
 $('#mn-reset-pins').addEventListener('click', () => { state.menu.pins = {}; save(); renderMenuSettings(); renderMenu(); });
 
-renderers.settings = () => { renderSettings(); renderMenuSettings(); };
+renderers.settings = () => { renderSettings(); renderMenuSettings(); renderTimerSettings(); };
 
 $('#profile-form').addEventListener('submit', (e) => {
   e.preventDefault();

@@ -20,7 +20,7 @@ export const DEFAULT_EXERCISES = [
   { name: 'ベンチプレス', muscles: { chest: 1, triceps: 0.5, shoulders: 0.5 }, equip: ['gym'], type: 'barbell', level: 2 },
   { name: 'ラットプルダウン', muscles: { back: 1, biceps: 0.5 }, equip: ['gym'], type: 'machine', level: 1 },
   { name: 'シーテッドロウ', muscles: { back: 1, biceps: 0.5 }, equip: ['gym'], type: 'machine', level: 1 },
-  { name: 'ダンベルロウ', muscles: { back: 1, biceps: 0.5 }, equip: ['gym', 'dumbbell'], type: 'dumbbell', level: 2 },
+  { name: 'ダンベルロウ', muscles: { back: 1, biceps: 0.5 }, equip: ['gym', 'dumbbell'], type: 'dumbbell', level: 2, sides: true },
   { name: 'ショルダープレス（マシン）', muscles: { shoulders: 1, triceps: 0.5 }, equip: ['gym'], type: 'machine', level: 1 },
   { name: 'ダンベルショルダープレス', muscles: { shoulders: 1, triceps: 0.5 }, equip: ['gym', 'dumbbell'], type: 'dumbbell', level: 2 },
   { name: 'サイドレイズ', muscles: { shoulders: 1 }, equip: ['gym', 'dumbbell'], type: 'dumbbell', level: 1 },
@@ -177,10 +177,13 @@ function exerciseMap(state) {
 }
 
 // 期間内のセットを列挙する
+// アップ（warmup）のセットは、集計・分析・提案には含めない
+export const workSets = (sets) => (sets || []).filter((s) => !s.warmup);
+
 export function setsInRange(workouts, from, to) {
   const out = [];
   for (const [date, sets] of Object.entries(workouts)) {
-    if (date >= from && date <= to) for (const s of sets) out.push({ ...s, date });
+    if (date >= from && date <= to) for (const s of workSets(sets)) out.push({ ...s, date });
   }
   return out;
 }
@@ -226,7 +229,7 @@ export function suggestExercises(state, muscle, n = 3) {
 // 種目ごとの日別ベスト（推定1RM）
 export function exerciseHistory(workouts, name) {
   return Object.keys(workouts).sort().flatMap((d) => {
-    const sets = workouts[d].filter((s) => s.exercise === name);
+    const sets = workSets(workouts[d]).filter((s) => s.exercise === name);
     if (!sets.length) return [];
     return [{
       date: d,
@@ -461,4 +464,58 @@ export function buildMenu(state, date = today()) {
     return c && { slot: k, label: SLOTS[k].label, ...c, sets, reps: t.reps };
   }).filter(Boolean);
   return { title, split: splitKey, items };
+}
+
+// ---------- 今日のセットの計画（漸進性過負荷） ----------
+// 前回のセットをすべて見て、今日の各セットの重量と回数を決める（ダブルプログレッション）
+//  - 前回、全セットが目標回数の上限に届いた（または余力が目安より多い）→ 重量を上げ、回数を下限に戻す
+//  - そうでなければ同じ重量で、各セット +1回（上限まで）
+//  - 前回、余力が目安より少なく回数も下限に届かなかった → 同じ重量・回数でフォームを固める
+export function setPlan(state, name, date = today(), plannedSets = null) {
+  const t = targetsFor(state.profile);
+  const [lo, hi] = t.reps;
+  const h = exerciseHistory(state.workouts, name).filter((x) => x.date < date);
+  const last = h.at(-1);
+  if (!last) return null;
+  const ex = exerciseMap(state).get(name);
+  // 左右別の種目は、片側（右）のセットだけで判断する
+  const lastSets = last.sets.filter((x) => x.side !== '左');
+  const W = Math.max(...lastSets.map((x) => x.weight));
+  const atTop = lastSets.filter((x) => x.weight === W);
+  const small = ex && Object.keys(ex.muscles || {}).every((m) => !MAJOR_MUSCLES.includes(m));
+  const step = W === 0 ? 0 : (small || W < 20 ? 1 : 2.5);
+  const rirOf = (x) => (Number.isFinite(x.rir) ? x.rir : null);
+  const allTop = atTop.every((x) => x.reps >= hi || (rirOf(x) != null && rirOf(x) > t.rir[1] && x.reps >= lo));
+  const tooHard = atTop.some((x) => rirOf(x) != null && rirOf(x) < t.rir[0] && x.reps < lo);
+  const n = plannedSets || Math.max(atTop.length, 2);
+
+  let sets, reason;
+  if (allTop && step) {
+    sets = Array.from({ length: n }, () => ({ weight: round1(W + step), reps: lo }));
+    reason = `前回すべてのセットで目標の上限（${hi}回）に届いた（または余力が多かった）ので、+${step}kg に上げて ${lo}回から始めましょう。`;
+  } else if (allTop) {
+    sets = Array.from({ length: n }, (_, i) => ({ weight: W, reps: (atTop[i] || atTop.at(-1)).reps + 1 }));
+    reason = '自重の種目なので、各セット1回ずつ増やしましょう。';
+  } else if (tooHard) {
+    sets = Array.from({ length: n }, (_, i) => ({ weight: W, reps: Math.max(1, (atTop[i] || atTop.at(-1)).reps) }));
+    reason = '前回は余力が目安より少なく、回数も届きませんでした。同じ重量・回数でフォームを固めましょう。';
+  } else {
+    sets = Array.from({ length: n }, (_, i) => {
+      const prev = (atTop[i] || atTop.at(-1)).reps;
+      return { weight: W, reps: Math.min(hi, Math.max(lo, prev + 1)) };
+    });
+    reason = `同じ ${W}kg で、各セット1回ずつ増やしましょう。全セット ${hi}回できたら重量を上げます。`;
+  }
+  return { date: last.date, last: lastSets, sets, reason, step };
+}
+
+// 種目ごとの休憩時間：重さを扱う種目は長め、1つの筋肉だけの種目は短め
+export function restFor(state, name) {
+  if (state.settings?.rest != null) return state.settings.rest;
+  const base = targetsFor(state.profile).rest;
+  const ex = exerciseMap(state).get(name);
+  const r15 = (v) => Math.max(60, Math.round(v / 15) * 15);
+  if (!ex) return base;
+  const compound = Object.values(ex.muscles || {}).filter((v) => v > 0).length >= 2;
+  return compound ? r15(base * (ex.level === 2 ? 1.5 : 1.25)) : r15(base * 0.75);
 }
