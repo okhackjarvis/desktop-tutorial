@@ -561,3 +561,57 @@ button.primary.flash { animation: press-flash 0.5s ease-out; }
 @media (prefers-reduced-motion: reduce) {
   .sets li.just-added, button.primary.flash, .count.bump, .celebrate { animation: none; }
 }
+
+/* ---------- 種目の選択（入力で絞り込み） ---------- */
+.field-label { display: block; color: var(--muted); font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+.combo { position: relative; }
+.combo input { padding-right: 48px; font-weight: 700; }
+.combo-toggle {
+  position: absolute; right: 4px; top: 4px; width: 40px; min-height: 40px; padding: 0;
+  border: none; background: transparent; color: var(--muted);
+}
+.combo-list {
+  position: absolute; z-index: 8; left: 0; right: 0; top: calc(100% + 6px);
+  max-height: 300px; overflow-y: auto; margin: 0; padding: 6px; list-style: none;
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+.combo-opt {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  min-height: 44px; padding: 8px 12px; border-radius: 10px; cursor: pointer;
+}
+.combo-opt.active, .combo-opt:hover { background: var(--accent-soft); }
+.combo-opt .opt-name { font-weight: 700; color: var(--text); }
+.combo-opt .opt-meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.combo-opt.new { justify-content: flex-start; color: var(--accent); font-weight: 700; }
+.combo-opt.new .icon { width: 18px; height: 18px; }
+.combo-empty { padding: 12px; color: var(--muted); font-size: 14px; }
+.new-inline {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px;
+  padding: 10px 12px; border-radius: 12px; background: var(--card-2); color: var(--text); font-size: 14px; font-weight: 500;
+}
+.new-inline select { width: auto; min-height: 40px; margin: 0; }
+
+/* ---------- 今日のメニュー ---------- */
+.menu-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.menu-head h2 { margin: 0; display: flex; align-items: center; }
+.menu-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.menu-item { display: flex; align-items: stretch; gap: 6px; }
+.menu-pick {
+  flex: 1; justify-content: flex-start; gap: 12px; text-align: left;
+  min-height: 56px; padding: 8px 12px; border-radius: 14px; background: var(--card-2); font-weight: 500;
+}
+.menu-item.current .menu-pick { border-color: var(--accent); background: var(--accent-soft); }
+.menu-check {
+  flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--card); border: 1px solid var(--border); font-family: var(--font-num); font-size: 14px; color: var(--muted);
+}
+.menu-check .icon { width: 16px; height: 16px; stroke-width: 3; }
+.menu-item.done .menu-check { background: var(--accent); border-color: var(--accent); color: #fff; }
+.menu-item.done .menu-name { color: var(--muted); }
+.menu-text { display: grid; gap: 1px; min-width: 0; }
+.menu-name { font-weight: 800; color: var(--text); display: flex; align-items: center; gap: 6px; }
+.menu-sub { font-size: 12px; color: var(--muted); }
+.pin { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: var(--card); border: 1px solid var(--border); color: var(--muted); }
+.menu-swap { flex: none; width: 48px; padding: 0; border-radius: 14px; background: var(--card-2); color: var(--muted); }
+.menu-swap .icon { width: 20px; height: 20px; }

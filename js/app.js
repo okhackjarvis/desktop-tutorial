@@ -2,7 +2,7 @@ import {
   MUSCLES, EQUIPMENT, DEFAULT_EXERCISES, GOALS, EXPERIENCE, REFS,
   today, addDays, round1, targetsFor, weakPoints, suggestExercises, exerciseHistory,
   stagnation, intensityCheck, nextSuggestion, weightAdvice, proteinTarget, cycleDay,
-  e1rm,
+  e1rm, LEGACY_EXERCISES, SPLITS, MENU_STYLES, buildMenu,
 } from './science.js';
 import { icon, hydrateIcons, LOGO_SRC } from './icons.js';
 import { illustration } from './illustrations.js';
@@ -29,11 +29,23 @@ function loadState() {
   return normalize({});
 }
 
+// 種目リストの版。標準の種目を入れ替えたときに上げる
+const CATALOG = 2;
+
 function normalize(s) {
-  const defaults = new Map(DEFAULT_EXERCISES.map((e) => [e.name, e]));
+  const defaults = new Map([...LEGACY_EXERCISES, ...DEFAULT_EXERCISES].map((e) => [e.name, e]));
   let exercises = Array.isArray(s.exercises) && s.exercises.length ? s.exercises : DEFAULT_EXERCISES;
   // 旧形式（種目名だけの配列）からの移行
   exercises = exercises.map((e) => (typeof e === 'string' ? (defaults.get(e) || { name: e, muscles: {} }) : e));
+  if (s.catalog !== CATALOG) {
+    // 標準の種目を新しいリストに入れ替える。自分で追加した種目と、記録がある種目は残す
+    const used = new Set(Object.values(s.workouts || {}).flat().map((x) => x.exercise));
+    const keep = exercises
+      .filter((e) => !DEFAULT_EXERCISES.some((d) => d.name === e.name))
+      .filter((e) => !defaults.has(e.name) || used.has(e.name))
+      .map((e) => (defaults.has(e.name) ? e : { ...e, custom: true }));
+    exercises = [...DEFAULT_EXERCISES, ...keep];
+  }
   const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
   // 旧形式は休憩 90秒が初期値として保存されていたので、90 は「目安を使う」とみなす
   const savedRest = s.settings && typeof s.settings.rest === 'number' ? s.settings.rest : null;
@@ -51,6 +63,8 @@ function normalize(s) {
     conditions: obj(s.conditions),
     periods: Array.isArray(s.periods) ? s.periods : [],
     settings: { rest },
+    menu: { enabled: true, split: 'auto', style: 'auto', size: null, pins: {}, ...obj(s.menu) },
+    catalog: CATALOG,
   };
 }
 
@@ -183,6 +197,7 @@ $('#onboarding-form').addEventListener('submit', (e) => {
   p.goal = document.querySelector('input[name="ob-goal"]:checked')?.value || 'hypertrophy';
   p.experience = $('#ob-experience').value;
   p.equipment = $('#ob-equipment').value;
+  p.days = Number($('#ob-days').value) || 3;
   p.sex = $('#ob-sex').value;
   const w = parseFloat($('#ob-weight').value);
   const h = parseFloat($('#ob-height').value);
@@ -212,25 +227,200 @@ $('#date-next').addEventListener('click', () => {
   if (next <= today()) { dateInput.value = next; renderLog(); }
 });
 
-// 種目を、主に鍛える部位ごとにまとめて表示する
-function renderExerciseOptions() {
-  const names = state.exercises.map((e) => e.name);
-  const primary = (ex) => Object.entries(ex.muscles).sort((a, b) => b[1] - a[1])[0]?.[0];
-  for (const select of [$('#exercise-select'), $('#graph-exercise')]) {
-    const current = select.value;
-    const groups = new Map();
-    for (const ex of state.exercises) {
-      const m = primary(ex);
-      const label = m ? MUSCLES[m] : 'その他';
-      if (!groups.has(label)) groups.set(label, []);
-      groups.get(label).push(el('option', { value: ex.name }, ex.name));
+// ---------- 種目の選択（入力で絞り込み＋候補表示） ----------
+const TYPE_LABEL = { machine: 'マシン', cable: 'ケーブル', dumbbell: 'ダンベル', barbell: 'バーベル', bodyweight: '自重' };
+const primaryOf = (ex) => Object.entries(ex.muscles || {}).sort((a, b) => b[1] - a[1])[0]?.[0];
+
+// ひらがな→カタカナ、英字は小文字、空白を除いてから比べる
+function norm(str) {
+  return (str || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '')
+    .replace(/[ぁ-ゖ]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60));
+}
+
+function exerciseMatches(query) {
+  const q = norm(query);
+  const menuNames = new Set(currentMenu()?.items.map((i) => i.exercise) || []);
+  return state.exercises
+    .map((ex) => {
+      const name = norm(ex.name);
+      const muscle = norm(MUSCLES[primaryOf(ex)] || '');
+      let rank;
+      if (!q) rank = menuNames.has(ex.name) ? 0 : 2;
+      else if (name.startsWith(q)) rank = 0;
+      else if (name.includes(q)) rank = 1;
+      else if (muscle.includes(q) || Object.keys(ex.muscles || {}).some((m) => norm(MUSCLES[m]).includes(q))) rank = 2;
+      else return null;
+      return { ex, rank };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.rank - b.rank)
+    .map((x) => x.ex);
+}
+
+const combo = { input: $('#exercise-input'), list: $('#exercise-options'), active: -1, items: [] };
+
+function openCombo() {
+  const q = combo.input.value === $('#exercise-select').value ? '' : combo.input.value.trim();
+  const found = exerciseMatches(q);
+  combo.items = found.map((ex) => ({ type: 'ex', name: ex.name, ex }));
+  if (q && !state.exercises.some((e) => norm(e.name) === norm(q))) combo.items.push({ type: 'new', name: q });
+  combo.active = combo.items.length ? 0 : -1;
+  renderCombo();
+  combo.list.classList.remove('hidden');
+  combo.input.setAttribute('aria-expanded', 'true');
+}
+
+function closeCombo() {
+  combo.list.classList.add('hidden');
+  combo.input.setAttribute('aria-expanded', 'false');
+  combo.input.removeAttribute('aria-activedescendant');
+}
+
+function renderCombo() {
+  combo.list.replaceChildren(...(combo.items.length ? combo.items.map((it, i) => {
+    const li = el('li', { id: `exopt-${i}`, role: 'option', class: `combo-opt${i === combo.active ? ' active' : ''}${it.type === 'new' ? ' new' : ''}`, 'aria-selected': i === combo.active ? 'true' : 'false' });
+    if (it.type === 'new') li.append(icon('plus'), el('span', {}, `「${it.name}」を新しい種目として追加`));
+    else {
+      li.append(el('span', { class: 'opt-name' }, it.name),
+        el('span', { class: 'opt-meta' }, [MUSCLES[primaryOf(it.ex)], TYPE_LABEL[it.ex.type] || (it.ex.custom ? '自分で追加' : '')].filter(Boolean).join('・')));
     }
-    select.replaceChildren(...[...groups].map(([label, opts]) => el('optgroup', { label }, ...opts)));
-    if (names.includes(current)) select.value = current;
+    li.addEventListener('mousedown', (e) => { e.preventDefault(); chooseCombo(i); });
+    return li;
+  }) : [el('li', { class: 'combo-empty' }, '見つかりません')]));
+  if (combo.active >= 0) {
+    combo.input.setAttribute('aria-activedescendant', `exopt-${combo.active}`);
+    $(`#exopt-${combo.active}`)?.scrollIntoView({ block: 'nearest' });
   }
 }
 
-$('#exercise-select').addEventListener('change', renderSuggestion);
+function chooseCombo(i) {
+  const it = combo.items[i];
+  if (!it) return;
+  closeCombo();
+  if (it.type === 'new') {
+    $('#new-ex-name').textContent = it.name;
+    $('#new-ex-muscle').replaceChildren(...options(MUSCLES));
+    $('#new-exercise-inline').classList.remove('hidden');
+    return;
+  }
+  setExercise(it.name);
+}
+
+function setExercise(name) {
+  $('#exercise-select').value = name;
+  combo.input.value = name;
+  $('#new-exercise-inline').classList.add('hidden');
+  renderSuggestion();
+  renderMenu();
+}
+
+combo.input.addEventListener('focus', () => { combo.input.select(); openCombo(); });
+combo.input.addEventListener('input', openCombo);
+combo.input.addEventListener('blur', () => {
+  closeCombo();
+  // 確定しなかったときは、選んでいた種目に戻す
+  if ($('#new-exercise-inline').classList.contains('hidden')) combo.input.value = $('#exercise-select').value;
+});
+combo.input.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (combo.list.classList.contains('hidden')) openCombo();
+    const n = combo.items.length;
+    if (n) combo.active = (combo.active + (e.key === 'ArrowDown' ? 1 : -1) + n) % n;
+    renderCombo();
+  } else if (e.key === 'Enter') {
+    if (!combo.list.classList.contains('hidden') && combo.active >= 0) { e.preventDefault(); chooseCombo(combo.active); combo.input.blur(); }
+  } else if (e.key === 'Escape') {
+    closeCombo();
+    combo.input.value = $('#exercise-select').value;
+  }
+});
+$('#exercise-toggle').addEventListener('click', () => {
+  if (combo.list.classList.contains('hidden')) { combo.input.focus(); } else { combo.input.blur(); }
+});
+
+$('#new-ex-add').addEventListener('click', () => {
+  const name = $('#new-ex-name').textContent.trim();
+  if (!name) return;
+  if (!state.exercises.some((e) => e.name === name)) {
+    state.exercises.push({ name, muscles: { [$('#new-ex-muscle').value]: 1 }, custom: true });
+    save();
+    renderExerciseOptions();
+  }
+  setExercise(name);
+});
+$('#new-ex-cancel').addEventListener('click', () => {
+  $('#new-exercise-inline').classList.add('hidden');
+  combo.input.value = $('#exercise-select').value;
+});
+
+// 進捗グラフ用の一覧（部位ごと）と、記録の種目の初期値
+function renderExerciseOptions() {
+  const names = state.exercises.map((e) => e.name);
+  const select = $('#graph-exercise');
+  const current = select.value;
+  const groups = new Map();
+  for (const ex of state.exercises) {
+    const label = MUSCLES[primaryOf(ex)] || 'その他';
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(el('option', { value: ex.name }, ex.name));
+  }
+  select.replaceChildren(...[...groups].map(([label, opts]) => el('optgroup', { label }, ...opts)));
+  if (names.includes(current)) select.value = current;
+  if (!names.includes($('#exercise-select').value)) {
+    const first = currentMenu()?.items[0]?.exercise || names[0];
+    $('#exercise-select').value = first;
+    combo.input.value = first;
+  }
+}
+
+// ---------- 今日のメニュー ----------
+function currentMenu() {
+  if (!state.menu.enabled) return null;
+  const m = buildMenu(state, dateInput.value || today());
+  return m.items.length ? m : null;
+}
+
+function renderMenu() {
+  const card = $('#menu-card');
+  const m = currentMenu();
+  card.classList.toggle('hidden', !m);
+  if (!m) return;
+  const date = dateInput.value || today();
+  const doneSets = (name) => (state.workouts[date] || []).filter((x) => x.exercise === name).length;
+  const beginner = state.profile.experience === 'beginner' && (state.menu.style || 'auto') === 'auto';
+  card.replaceChildren(
+    el('div', { class: 'menu-head' },
+      el('h2', {}, icon('target'), '今日のメニュー'),
+      el('span', { class: 'badge' }, m.title)),
+    el('ul', { class: 'menu-list' }, ...m.items.map((it) => {
+      const done = doneSets(it.exercise);
+      const complete = done >= it.sets;
+      const alts = it.alternatives;
+      return el('li', { class: `menu-item${complete ? ' done' : ''}${$('#exercise-select').value === it.exercise ? ' current' : ''}` },
+        el('button', { type: 'button', class: 'menu-pick', onclick: () => { setExercise(it.exercise); $('#add-set-form').scrollIntoView({ behavior: 'smooth', block: 'start' }); } },
+          el('span', { class: 'menu-check' }, complete ? icon('check') : String(m.items.indexOf(it) + 1)),
+          el('span', { class: 'menu-text' },
+            el('span', { class: 'menu-name' }, it.exercise, it.pinned ? el('span', { class: 'pin' }, '固定') : null),
+            el('span', { class: 'menu-sub' }, `${it.label}・${it.sets}セット × ${it.reps[0]}〜${it.reps[1]}回・${done}/${it.sets}`)),
+        ),
+        alts.length > 1 ? el('button', {
+          type: 'button', class: 'menu-swap', 'aria-label': `${it.label}の種目を入れ替える`,
+          onclick: () => {
+            const next = alts[(alts.indexOf(it.exercise) + 1) % alts.length];
+            state.menu.pins[it.slot] = next;
+            save();
+            renderMenu();
+          },
+        }, icon('repeat')) : null,
+      );
+    })),
+    beginner ? el('p', { class: 'hint' }, '初心者のうちは、動きが決まっていてフォームを覚えやすいマシン中心のメニューにしています。') : null,
+    evidence('machines', 'split'),
+  );
+}
+
+
 
 // −／＋ボタン（重量は 20kg 未満なら 1kg 刻み）
 document.querySelectorAll('.step').forEach((b) => b.addEventListener('click', () => {
@@ -377,6 +567,7 @@ function renderLog({ keepInputs = false } = {}) {
 
   // セットを追加した直後は、入力した重量・回数をそのまま残す（次のセットも同じことが多いため）
   if (!keepInputs) renderSuggestion();
+  renderMenu();
 }
 
 document.querySelectorAll('#condition button').forEach((b) => b.addEventListener('click', () => {
@@ -828,7 +1019,31 @@ function renderSettings() {
   }));
 }
 
-renderers.settings = renderSettings;
+function renderMenuSettings() {
+  const m = state.menu;
+  $('#mn-enabled').checked = !!m.enabled;
+  $('#mn-split').replaceChildren(el('option', { value: 'auto' }, `自動（週${state.profile.days || 3}日 → ${SPLITS[splitAuto()].label}）`),
+    ...Object.entries(SPLITS).map(([k, v]) => el('option', { value: k, selected: m.split === k }, v.label)));
+  $('#mn-split').value = m.split || 'auto';
+  $('#mn-style').replaceChildren(...options(MENU_STYLES, m.style || 'auto'));
+  $('#mn-size').value = m.size ? String(m.size) : '';
+  const pins = Object.entries(m.pins || {});
+  $('#mn-pins-info').textContent = pins.length ? `固定中：${pins.map(([, n]) => n).join('、')}` : '固定している種目はありません。';
+  $('#mn-reset-pins').disabled = !pins.length;
+}
+
+function splitAuto() {
+  const d = state.profile.days || 3;
+  return d >= 5 ? 'ppl' : d === 4 ? 'upperlower' : 'full';
+}
+
+$('#mn-enabled').addEventListener('change', (e) => { state.menu.enabled = e.target.checked; save(); renderMenu(); });
+$('#mn-split').addEventListener('change', (e) => { state.menu.split = e.target.value; save(); renderMenu(); });
+$('#mn-style').addEventListener('change', (e) => { state.menu.style = e.target.value; save(); renderMenu(); });
+$('#mn-size').addEventListener('change', (e) => { state.menu.size = Number(e.target.value) || null; save(); renderMenu(); });
+$('#mn-reset-pins').addEventListener('click', () => { state.menu.pins = {}; save(); renderMenuSettings(); renderMenu(); });
+
+renderers.settings = () => { renderSettings(); renderMenuSettings(); };
 
 $('#profile-form').addEventListener('submit', (e) => {
   e.preventDefault();
@@ -864,7 +1079,7 @@ $('#add-exercise-form').addEventListener('submit', (e) => {
   const muscles = { [$('#new-primary').value]: 1 };
   const secondary = $('#new-secondary').value;
   if (secondary && !(secondary in muscles)) muscles[secondary] = 0.5;
-  state.exercises.push({ name, muscles });
+  state.exercises.push({ name, muscles, custom: true });
   $('#new-exercise').value = '';
   save();
   renderExerciseOptions();
