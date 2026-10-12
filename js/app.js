@@ -1,0 +1,760 @@
+import {
+  MUSCLES, EQUIPMENT, DEFAULT_EXERCISES, GOALS, EXPERIENCE, REFS,
+  today, addDays, round1, targetsFor, weakPoints, suggestExercises, exerciseHistory,
+  stagnation, intensityCheck, nextSuggestion, weightAdvice, proteinTarget, cycleDay,
+} from './science.js';
+
+const STORAGE_KEY = 'kintore-v1';
+
+// ---------- データ ----------
+// state = {
+//   profile: { goal, experience, equipment, days, height, weight, sex, focus[], avoid[], cycle, onboarded },
+//   exercises: [{ name, muscles: { muscle: 1 | 0.5 }, equip[] }],
+//   workouts: { 'YYYY-MM-DD': [{ exercise, weight, reps, rir? }] },
+//   bodyweights: { 'YYYY-MM-DD': kg },
+//   measurements: { 'YYYY-MM-DD': { waist, chest, arm, thigh, hip } },
+//   conditions: { 'YYYY-MM-DD': 1..5 },
+//   periods: ['YYYY-MM-DD'],
+//   settings: { rest: number | null },
+// }
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return normalize(JSON.parse(raw));
+  } catch (e) { /* 保存領域が使えないときは初期状態で動かす */ }
+  return normalize({});
+}
+
+function normalize(s) {
+  const defaults = new Map(DEFAULT_EXERCISES.map((e) => [e.name, e]));
+  let exercises = Array.isArray(s.exercises) && s.exercises.length ? s.exercises : DEFAULT_EXERCISES;
+  // 旧形式（種目名だけの配列）からの移行
+  exercises = exercises.map((e) => (typeof e === 'string' ? (defaults.get(e) || { name: e, muscles: {} }) : e));
+  const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+  // 旧形式は休憩 90秒が初期値として保存されていたので、90 は「目安を使う」とみなす
+  const savedRest = s.settings && typeof s.settings.rest === 'number' ? s.settings.rest : null;
+  const rest = s.profile ? savedRest : (savedRest === 90 ? null : savedRest);
+  return {
+    profile: {
+      goal: 'hypertrophy', experience: 'beginner', equipment: 'gym', days: 3,
+      height: null, weight: null, sex: '', focus: [], avoid: [], cycle: false, onboarded: false,
+      ...obj(s.profile),
+    },
+    exercises: exercises.map((e) => ({ ...e })),
+    workouts: obj(s.workouts),
+    bodyweights: obj(s.bodyweights),
+    measurements: obj(s.measurements),
+    conditions: obj(s.conditions),
+    periods: Array.isArray(s.periods) ? s.periods : [],
+    settings: { rest },
+  };
+}
+
+function save() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    alert('保存できませんでした。ブラウザの設定を確認してください。');
+  }
+}
+
+let state = loadState();
+
+// ---------- ユーティリティ ----------
+const $ = (sel) => document.querySelector(sel);
+
+function formatDate(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const wd = '日月火水木金土'[new Date(y, m - 1, d).getDay()];
+  return `${y}/${m}/${d}（${wd}）`;
+}
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') node.className = v;
+    else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of children.flat()) if (c != null && c !== false) node.append(c);
+  return node;
+}
+
+const options = (map, selected) => Object.entries(map).map(([v, label]) => el('option', { value: v, selected: v === selected }, label));
+const restSeconds = () => (state.settings.rest ?? targetsFor(state.profile).rest);
+
+// 根拠の折りたたみ表示
+function evidence(...keys) {
+  return el('details', { class: 'evidence' },
+    el('summary', {}, '根拠を見る'),
+    ...keys.map((k) => el('div', {},
+      el('strong', {}, REFS[k].title),
+      el('p', {}, REFS[k].text),
+      el('ul', {}, ...REFS[k].cites.map((c) => el('li', {}, c))),
+    )),
+  );
+}
+
+// 折れ線グラフ（SVG）
+function lineChart(points, unit) {
+  const W = 340, H = 200, padL = 44, padR = 12, padT = 14, padB = 26;
+  const values = points.map((p) => p.value);
+  let lo = Math.min(...values), hi = Math.max(...values);
+  if (lo === hi) { lo -= 1; hi += 1; }
+  const span = hi - lo;
+  lo -= span * 0.1;
+  hi += span * 0.1;
+  const x = (i) => (points.length === 1 ? (padL + W - padR) / 2 : padL + (i * (W - padL - padR)) / (points.length - 1));
+  const y = (v) => padT + ((hi - v) * (H - padT - padB)) / (hi - lo);
+
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('class', 'chart');
+  const add = (tag, attrs, text) => {
+    const n = document.createElementNS(ns, tag);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    if (text != null) n.textContent = text;
+    svg.append(n);
+    return n;
+  };
+  for (let k = 0; k <= 2; k++) {
+    const v = lo + ((hi - lo) * k) / 2;
+    add('line', { class: 'axis', x1: padL, x2: W - padR, y1: y(v), y2: y(v) });
+    add('text', { x: padL - 6, y: y(v) + 4, 'text-anchor': 'end' }, String(round1(v)));
+  }
+  add('polyline', { class: 'line', points: points.map((p, i) => `${x(i)},${y(p.value)}`).join(' ') });
+  points.forEach((p, i) => {
+    const dot = add('circle', { class: 'dot', cx: x(i), cy: y(p.value), r: 3.5 });
+    const t = document.createElementNS(ns, 'title');
+    t.textContent = `${formatDate(p.date)}  ${p.value} ${unit}`;
+    dot.append(t);
+  });
+  const short = (iso) => iso.slice(5).replace('-', '/');
+  add('text', { x: x(0), y: H - 6, 'text-anchor': points.length === 1 ? 'middle' : 'start' }, short(points[0].date));
+  if (points.length > 1) add('text', { x: x(points.length - 1), y: H - 6, 'text-anchor': 'end' }, short(points.at(-1).date));
+  return svg;
+}
+
+// ---------- タブ ----------
+const renderers = {};
+
+document.querySelectorAll('.tabbar button').forEach((btn) => btn.addEventListener('click', () => showTab(btn.dataset.tab)));
+
+function showTab(name) {
+  document.querySelectorAll('.tabbar button').forEach((b) => b.classList.toggle('on', b.dataset.tab === name));
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === `tab-${name}`));
+  renderers[name]?.();
+  window.scrollTo(0, 0);
+}
+
+function renderGoalBadge() {
+  $('#goal-badge').textContent = `目的：${GOALS[state.profile.goal].short}`;
+}
+
+// ---------- 初回設定 ----------
+function setupOnboarding() {
+  $('#ob-goal').replaceChildren(...Object.entries(GOALS).map(([k, g], i) =>
+    el('label', { class: 'choice' },
+      el('input', { type: 'radio', name: 'ob-goal', value: k, checked: i === 0 }),
+      el('span', {}, g.label)),
+  ));
+  $('#ob-experience').replaceChildren(...options(EXPERIENCE, 'beginner'));
+  $('#ob-equipment').replaceChildren(...options(EQUIPMENT, 'gym'));
+  $('#onboarding').classList.remove('hidden');
+}
+
+$('#onboarding-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const p = state.profile;
+  p.goal = document.querySelector('input[name="ob-goal"]:checked')?.value || 'hypertrophy';
+  p.experience = $('#ob-experience').value;
+  p.equipment = $('#ob-equipment').value;
+  p.sex = $('#ob-sex').value;
+  const w = parseFloat($('#ob-weight').value);
+  const h = parseFloat($('#ob-height').value);
+  if (w > 0) { p.weight = w; state.bodyweights[today()] = w; }
+  if (h > 0) p.height = h;
+  p.onboarded = true;
+  save();
+  $('#onboarding').classList.add('hidden');
+  refreshAll();
+});
+
+// ---------- 記録 ----------
+const dateInput = $('#log-date');
+dateInput.value = today();
+dateInput.addEventListener('change', renderLog);
+
+function renderExerciseOptions() {
+  const names = state.exercises.map((e) => e.name);
+  for (const select of [$('#exercise-select'), $('#graph-exercise')]) {
+    const current = select.value;
+    select.replaceChildren(...names.map((n) => el('option', { value: n }, n)));
+    if (names.includes(current)) select.value = current;
+  }
+}
+
+$('#exercise-select').addEventListener('change', renderSuggestion);
+
+// 前回の記録から次の重量・回数を提案し、入力欄にも入れておく
+function renderSuggestion() {
+  const name = $('#exercise-select').value;
+  const box = $('#suggestion');
+  const s = nextSuggestion(state, name, dateInput.value || today());
+  if (!s) {
+    box.classList.add('hidden');
+    $('#weight').value = '';
+    $('#reps').value = '';
+    return;
+  }
+  $('#weight').value = s.weight;
+  $('#reps').value = s.reps;
+  const rirText = Number.isFinite(s.last.rir) ? `・余力${s.last.rir}` : '';
+  box.replaceChildren(
+    el('div', {}, `前回（${s.lastDate.slice(5).replace('-', '/')}）：${s.last.weight}kg × ${s.last.reps}回${rirText}`),
+    el('strong', {}, `今日の提案：${s.weight}kg × ${s.reps}回`),
+    el('div', { class: 'hint' }, s.reason),
+  );
+  box.classList.remove('hidden');
+}
+
+$('#add-set-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const weight = parseFloat($('#weight').value);
+  const reps = parseInt($('#reps').value, 10);
+  if (!(weight >= 0) || !(reps >= 1)) return;
+  const rirRaw = $('#rir').value;
+  const set = { exercise: $('#exercise-select').value, weight, reps };
+  if (rirRaw !== '') set.rir = Number(rirRaw);
+  const date = dateInput.value || today();
+  (state.workouts[date] ||= []).push(set);
+  save();
+  renderLog();
+  startTimer();
+});
+
+function deleteSet(date, index) {
+  state.workouts[date].splice(index, 1);
+  if (!state.workouts[date].length) delete state.workouts[date];
+  save();
+  renderLog();
+}
+
+function groupByExercise(sets) {
+  const groups = new Map();
+  sets.forEach((s, i) => {
+    if (!groups.has(s.exercise)) groups.set(s.exercise, []);
+    groups.get(s.exercise).push({ ...s, index: i });
+  });
+  return groups;
+}
+
+function renderLog() {
+  const date = dateInput.value || today();
+  const t = targetsFor(state.profile);
+  $('#rir-target').textContent = `${GOALS[state.profile.goal].short}なら、${t.reps[0]}〜${t.reps[1]}回やって「あと${t.rir[0]}〜${t.rir[1]}回できる」くらいの重さ`;
+
+  const sets = state.workouts[date] || [];
+  const container = $('#day-log');
+  if (!sets.length) {
+    container.replaceChildren(el('p', { class: 'empty' }, 'この日の記録はまだありません'));
+  } else {
+    container.replaceChildren(...[...groupByExercise(sets)].map(([name, list]) =>
+      el('div', { class: 'card exercise-block' },
+        el('h3', {}, name),
+        el('ul', { class: 'sets' }, ...list.map((s, n) =>
+          el('li', {},
+            el('span', {}, `${n + 1}セット目　${s.weight} kg × ${s.reps} 回${Number.isFinite(s.rir) ? `（余力${s.rir}）` : ''}`),
+            el('button', { class: 'small danger', type: 'button', 'aria-label': '削除', onclick: () => deleteSet(date, s.index) }, '削除'),
+          ),
+        )),
+      ),
+    ));
+  }
+
+  const cond = state.conditions[date];
+  document.querySelectorAll('#condition button').forEach((b) => b.classList.toggle('on', Number(b.dataset.v) === cond));
+
+  const info = $('#cycle-info');
+  const day = state.profile.cycle ? cycleDay(state.periods, date) : null;
+  info.classList.toggle('hidden', !day);
+  if (day) info.textContent = `生理周期 ${day}日目`;
+
+  renderSuggestion();
+}
+
+document.querySelectorAll('#condition button').forEach((b) => b.addEventListener('click', () => {
+  const date = dateInput.value || today();
+  const v = Number(b.dataset.v);
+  if (state.conditions[date] === v) delete state.conditions[date];
+  else state.conditions[date] = v;
+  save();
+  renderLog();
+}));
+
+// ---------- 休憩タイマー ----------
+let timerId = null;
+
+function startTimer() {
+  stopTimer();
+  const total = Number(restSeconds()) || 0;
+  if (total <= 0) return;
+  const endAt = Date.now() + total * 1000;
+  const box = $('#timer');
+  box.classList.remove('hidden', 'done');
+  const tick = () => {
+    const left = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+    $('#timer-display').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+    if (left === 0) {
+      clearInterval(timerId);
+      timerId = null;
+      box.classList.add('done');
+      $('#timer-display').textContent = '次のセットへ';
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    }
+  };
+  tick();
+  timerId = setInterval(tick, 250);
+}
+
+function stopTimer() {
+  if (timerId) clearInterval(timerId);
+  timerId = null;
+  $('#timer').classList.add('hidden');
+}
+
+$('#timer-stop').addEventListener('click', stopTimer);
+
+// ---------- 分析 ----------
+renderers.analysis = function renderAnalysis() {
+  const p = state.profile;
+  const t = targetsFor(p);
+  const { rows, weak, over, lowFreq } = weakPoints(state);
+  const cards = [];
+
+  // あなたの目安
+  const perSession = p.days > 0 ? `週${p.days}日なら、1回あたり各部位 ${Math.ceil(t.sets[0] / Math.min(p.days, 3))}〜${Math.ceil(t.sets[1] / Math.min(p.days, 3))} セットほど（同じ部位は週2〜3回に分けて）` : '';
+  cards.push(el('div', { class: 'card' },
+    el('h2', {}, `あなたの目安（${GOALS[p.goal].short}・${EXPERIENCE[p.experience].split('（')[0]}）`),
+    el('table', { class: 'targets' },
+      el('tr', {}, el('th', {}, '週のセット数'), el('td', {}, `1部位あたり ${t.sets[0]}〜${t.sets[1]}`)),
+      el('tr', {}, el('th', {}, '回数'), el('td', {}, `${t.reps[0]}〜${t.reps[1]} 回`)),
+      el('tr', {}, el('th', {}, '余力'), el('td', {}, `あと ${t.rir[0]}〜${t.rir[1]} 回`)),
+      el('tr', {}, el('th', {}, '休憩'), el('td', {}, `${restSeconds()} 秒`)),
+    ),
+    perSession && el('p', { class: 'hint' }, perSession),
+    evidence('volume', 'rir', 'reps', ...(p.sex ? ['sex'] : [])),
+  ));
+
+  // 部位ごとの週のセット数
+  const maxSets = Math.max(...rows.map((r) => Math.max(r.sets, r.target?.hi || 0)), 1);
+  cards.push(el('div', { class: 'card' },
+    el('h2', {}, '部位ごとのセット数（直近7日）'),
+    el('div', { class: 'bars' }, ...rows.map((r) => {
+      const status = !r.target ? 'skip' : r.sets < r.target.lo ? (r.target.minor ? 'minor' : 'low') : r.sets > r.target.hi ? 'high' : 'ok';
+      return el('div', { class: `bar-row ${status}` },
+        el('span', { class: 'bar-label' }, MUSCLES[r.muscle]),
+        el('span', { class: 'bar-track' },
+          r.target && el('span', { class: 'bar-target', style: `left:${(r.target.lo / maxSets) * 100}%;width:${((r.target.hi - r.target.lo) / maxSets) * 100}%` }),
+          el('span', { class: 'bar-fill', style: `width:${(r.sets / maxSets) * 100}%` }),
+        ),
+        el('span', { class: 'bar-value' }, r.target ? `${r.sets}` : '対象外'),
+      );
+    })),
+    el('p', { class: 'hint' }, '薄い帯が目安の範囲。補助的に使った部位は 0.5 セットとして数えています。腕・ふくらはぎ・腹筋は大きな種目でも鍛えられるので、目安を低めにしています。'),
+    evidence('volume', 'frequency'),
+  ));
+
+  // 弱点
+  const weakItems = [];
+  for (const r of weak) {
+    const ex = suggestExercises(state, r.muscle);
+    weakItems.push(el('li', {},
+      el('strong', {}, `${MUSCLES[r.muscle]}：週 ${r.sets} セット`),
+      ` （目安 ${r.target.lo}〜${r.target.hi}）`,
+      ex.length ? el('div', { class: 'hint' }, `おすすめ：${ex.join('、')}`) : null,
+    ));
+  }
+  for (const r of lowFreq) {
+    weakItems.push(el('li', {}, el('strong', {}, `${MUSCLES[r.muscle]}：週1回だけ`), el('div', { class: 'hint' }, '量は足りています。週2回に分けると、1回の質を保ちやすくなります。')));
+  }
+  for (const r of over) {
+    weakItems.push(el('li', {}, el('strong', {}, `${MUSCLES[r.muscle]}：週 ${r.sets} セット`), el('div', { class: 'hint' }, `目安（〜${r.target.hi}）を大きく超えています。回復が追いつかない場合は減らしましょう。`)));
+  }
+  const hasData = rows.some((r) => r.sets > 0);
+  cards.push(el('div', { class: 'card' },
+    el('h2', {}, '弱点・改善ポイント'),
+    !hasData ? el('p', { class: 'empty' }, '直近7日の記録がありません')
+      : weakItems.length ? el('ul', { class: 'advice' }, ...weakItems)
+        : el('p', { class: 'good' }, '主な部位はすべて目安の範囲です。この調子で続けましょう。'),
+  ));
+
+  // 追い込み度と回数
+  const ic = intensityCheck(state);
+  const icItems = [];
+  if (ic.total) {
+    if (ic.avgRir == null) icItems.push(el('li', {}, '「余力」を記録すると、追い込み度が目的に合っているかを判定できます。'));
+    else if (ic.avgRir > t.rir[1]) icItems.push(el('li', {}, `平均の余力 ${ic.avgRir}回：目安（${t.rir[0]}〜${t.rir[1]}）より余裕があります。重さか回数を増やしましょう。`));
+    else if (ic.avgRir < t.rir[0]) icItems.push(el('li', {}, `平均の余力 ${ic.avgRir}回：毎回限界を超えていませんか。疲れがたまりやすいので、少し余裕を残しましょう。`));
+    else icItems.push(el('li', { class: 'good' }, `平均の余力 ${ic.avgRir}回：目的に合った追い込み度です。`));
+    if (ic.inRange != null) {
+      icItems.push(el('li', { class: ic.inRange >= 60 ? 'good' : '' },
+        `目安の回数（${t.reps[0]}〜${t.reps[1]}回）に入ったセット：${ic.inRange}%`,
+        ic.inRange < 60 ? el('div', { class: 'hint' }, p.goal === 'strength' ? '筋力を伸ばすには、重めの重量で少ない回数のセットを増やしましょう。' : '重さを調整して、目安の回数で限界近くになるようにしましょう。') : null));
+    }
+  }
+  cards.push(el('div', { class: 'card' },
+    el('h2', {}, '追い込み度と回数（直近14日）'),
+    ic.total ? el('ul', { class: 'advice' }, ...icItems) : el('p', { class: 'empty' }, '直近14日の記録がありません'),
+    evidence('rir', 'reps'),
+  ));
+
+  // 伸び悩み
+  const st = stagnation(state);
+  cards.push(el('div', { class: 'card' },
+    el('h2', {}, '伸び悩んでいる種目'),
+    st.length ? el('ul', { class: 'advice' }, ...st.map((s) => el('li', {},
+      el('strong', {}, s.name),
+      el('div', { class: 'hint' }, `直近3週間のベスト（推定1RM ${s.bestRecent}kg）が、それ以前（${s.bestBefore}kg）を超えていません。睡眠とたんぱく質を見直す、回数の範囲を変える、1週間だけ量を半分にして回復させる、などを試しましょう。`),
+    ))) : el('p', { class: 'hint' }, '伸び悩んでいる種目はありません（判定には各種目4回以上の記録が必要です）。'),
+    evidence('progression'),
+  ));
+
+  // 調子と生理周期
+  if (p.cycle) {
+    const phases = [['生理中（1〜5日目）', 1, 5], ['6〜14日目', 6, 14], ['15日目以降', 15, 60]];
+    const stats = phases.map(([label, a, b]) => {
+      const v = Object.entries(state.conditions).filter(([d]) => { const c = cycleDay(state.periods, d); return c && c >= a && c <= b; }).map(([, x]) => x);
+      return { label, n: v.length, avg: v.length ? round1(v.reduce((s, x) => s + x, 0) / v.length) : null };
+    });
+    cards.push(el('div', { class: 'card' },
+      el('h2', {}, '調子と生理周期'),
+      el('table', { class: 'targets' }, ...stats.map((s) => el('tr', {}, el('th', {}, s.label), el('td', {}, s.avg == null ? '記録なし' : `調子 ${s.avg} / 5（${s.n}日）`)))),
+      el('p', { class: 'hint' }, '周期によって調子が変わるかは個人差が大きいので、自分のパターンを知る参考にしてください。'),
+      evidence('sex'),
+    ));
+  }
+
+  $('#analysis').replaceChildren(...cards);
+};
+
+// ---------- 進捗 ----------
+let metric = 'max';
+const METRIC_LABEL = { max: '最大重量', e1rm: '推定1RM', volume: '総挙上量' };
+
+document.querySelectorAll('#metric-select button').forEach((btn) => btn.addEventListener('click', () => {
+  metric = btn.dataset.metric;
+  document.querySelectorAll('#metric-select button').forEach((b) => b.classList.toggle('on', b === btn));
+  renderGraph();
+}));
+$('#graph-exercise').addEventListener('change', renderGraph);
+
+function renderGraph() {
+  const points = exerciseHistory(state.workouts, $('#graph-exercise').value).map((h) => ({ date: h.date, value: round1(h[metric]) }));
+  const container = $('#graph');
+  if (!points.length) {
+    container.replaceChildren(el('p', { class: 'empty' }, 'この種目の記録はまだありません'));
+    return;
+  }
+  const first = points[0].value, last = points.at(-1).value;
+  const diff = round1(last - first);
+  container.replaceChildren(
+    el('p', { class: 'hint' }, `${METRIC_LABEL[metric]}：最新 ${last}kg（最初から ${diff >= 0 ? '+' : ''}${diff}）`),
+    lineChart(points, 'kg'),
+  );
+}
+
+function renderHistory() {
+  const dates = Object.keys(state.workouts).sort().reverse();
+  const container = $('#history-list');
+  if (!dates.length) {
+    container.replaceChildren(el('p', { class: 'empty' }, 'まだ記録がありません'));
+    return;
+  }
+  container.replaceChildren(...dates.map((d) => {
+    const summary = [...groupByExercise(state.workouts[d])].map(([name, list]) => `${name} ${list.length}セット`).join('・');
+    return el('div', { class: 'card history-day', onclick: () => { dateInput.value = d; showTab('log'); } },
+      el('div', { class: 'date' }, formatDate(d)),
+      el('div', { class: 'summary' }, summary),
+    );
+  }));
+}
+
+renderers.progress = () => { renderGraph(); renderHistory(); };
+
+// 今週のまとめ画像
+$('#share-week').addEventListener('click', async () => {
+  const end = today();
+  const from = addDays(end, -6);
+  const { rows } = weakPoints(state, end);
+  const days = Object.keys(state.workouts).filter((d) => d >= from && d <= end);
+  const totalSets = days.reduce((n, d) => n + state.workouts[d].length, 0);
+  // 今週、自己ベスト（推定1RM）を更新した種目
+  const prs = [];
+  for (const ex of state.exercises) {
+    const h = exerciseHistory(state.workouts, ex.name);
+    const before = h.filter((x) => x.date < from);
+    const week = h.filter((x) => x.date >= from && x.date <= end);
+    if (!week.length || !before.length) continue;
+    const best = Math.max(...week.map((x) => x.e1rm));
+    const prev = Math.max(...before.map((x) => x.e1rm));
+    if (best > prev) prs.push(`${ex.name} +${round1(best - prev)}kg`);
+  }
+
+  const c = document.createElement('canvas');
+  c.width = 1080; c.height = 1350;
+  const g = c.getContext('2d');
+  const font = (size, weight = 400) => `${weight} ${size}px system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif`;
+  g.fillStyle = '#0f1115'; g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = '#22c55e'; g.font = font(44, 700); g.fillText('今週の筋トレ', 80, 130);
+  g.fillStyle = '#9ca3af'; g.font = font(32); g.fillText(`${formatDate(from)} 〜 ${formatDate(end)}`, 80, 185);
+  g.fillStyle = '#f3f4f6'; g.font = font(120, 700); g.fillText(`${days.length}日`, 80, 350);
+  g.font = font(40); g.fillStyle = '#9ca3af'; g.fillText(`合計 ${totalSets} セット`, 420, 350);
+
+  g.font = font(36, 700); g.fillStyle = '#f3f4f6'; g.fillText('部位ごとのセット数', 80, 460);
+  const shown = rows.filter((r) => r.sets > 0).sort((a, b) => b.sets - a.sets).slice(0, 6);
+  const maxV = Math.max(...shown.map((r) => r.sets), 1);
+  shown.forEach((r, i) => {
+    const y = 510 + i * 70;
+    g.font = font(32); g.fillStyle = '#d1d5db'; g.fillText(MUSCLES[r.muscle], 80, y + 34);
+    g.fillStyle = '#1f2937'; g.fillRect(320, y + 8, 560, 32);
+    g.fillStyle = '#22c55e'; g.fillRect(320, y + 8, (560 * r.sets) / maxV, 32);
+    g.fillStyle = '#f3f4f6'; g.fillText(String(r.sets), 900, y + 34);
+  });
+
+  const prY = 510 + Math.max(shown.length, 1) * 70 + 60;
+  g.font = font(36, 700); g.fillStyle = '#f3f4f6'; g.fillText('自己ベスト更新', 80, prY);
+  g.font = font(32); g.fillStyle = prs.length ? '#22c55e' : '#9ca3af';
+  (prs.length ? prs.slice(0, 4) : ['今週はなし。次は更新しよう！']).forEach((t, i) => g.fillText(t, 80, prY + 55 + i * 50));
+
+  g.font = font(28); g.fillStyle = '#6b7280'; g.fillText('筋トレ記録', 80, 1290);
+
+  const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+  const file = new File([blob], `kintore-${end}.png`, { type: 'image/png' });
+  const preview = $('#share-preview');
+  preview.src = URL.createObjectURL(blob);
+  preview.classList.remove('hidden');
+  try {
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], text: '今週の筋トレ' });
+      return;
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+  }
+  const a = el('a', { href: preview.src, download: file.name });
+  a.click();
+});
+
+// ---------- 体 ----------
+$('#bw-date').value = today();
+$('#ms-date').value = today();
+
+$('#bodyweight-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const v = parseFloat($('#bw-value').value);
+  if (!(v > 0)) return;
+  state.bodyweights[$('#bw-date').value || today()] = v;
+  $('#bw-value').value = '';
+  save();
+  renderBody();
+});
+
+$('#measure-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const entry = {};
+  document.querySelectorAll('#measure-form input[data-key]').forEach((i) => {
+    const v = parseFloat(i.value);
+    if (v > 0) entry[i.dataset.key] = v;
+  });
+  if (!Object.keys(entry).length) return;
+  const d = $('#ms-date').value || today();
+  state.measurements[d] = { ...(state.measurements[d] || {}), ...entry };
+  document.querySelectorAll('#measure-form input[data-key]').forEach((i) => { i.value = ''; });
+  save();
+  renderBody();
+});
+
+const MEASURE_LABEL = { waist: 'ウエスト', chest: '胸囲', arm: '腕', thigh: '太もも', hip: 'お尻' };
+
+function renderBody() {
+  // 体重
+  const adv = weightAdvice(state);
+  const bwDates = Object.keys(state.bodyweights).sort();
+  $('#bw-summary').replaceChildren(
+    adv.trend.cur != null ? el('p', {}, `直近7日の平均：${adv.trend.cur}kg${adv.bmi ? `（BMI ${adv.bmi}）` : ''}`) : null,
+    el('div', { class: `notice ${adv.level}` }, ...adv.messages.map((m) => el('p', {}, m))),
+    el('p', { class: 'hint' }, `目的（${GOALS[state.profile.goal].short}）の目安：週 ${adv.range.lo > 0 ? '+' : ''}${adv.range.lo}〜${adv.range.hi > 0 ? '+' : ''}${adv.range.hi}%`),
+    evidence('weightRate', ...(state.profile.sex === 'female' ? ['sex'] : [])),
+  );
+  const recent = bwDates.slice(-60).map((d) => ({ date: d, value: state.bodyweights[d] }));
+  $('#bw-graph').replaceChildren(...(recent.length >= 2 ? [lineChart(recent, 'kg')] : []));
+
+  // たんぱく質
+  const pt = proteinTarget(state);
+  $('#protein-card').replaceChildren(
+    el('h2', {}, 'たんぱく質の目安'),
+    pt ? el('p', { class: 'big' }, `1日 ${pt.grams[0]}〜${pt.grams[1]} g`) : el('p', { class: 'empty' }, '体重を記録すると計算します'),
+    pt ? el('p', { class: 'hint' }, `体重 ${pt.weight}kg × ${pt.perKg[0]}〜${pt.perKg[1]}g。目安：鶏むね肉100g ≈ 23g、卵1個 ≈ 6g、納豆1パック ≈ 7g、プロテイン1杯 ≈ 20g`) : null,
+    el('p', { class: 'hint' }, '腎臓の病気がある方は、たんぱく質の量を医師に相談してください。'),
+    evidence('protein'),
+  );
+
+  // サイズ
+  const msDates = Object.keys(state.measurements).sort();
+  const latest = {}, first = {};
+  for (const d of msDates) for (const [k, v] of Object.entries(state.measurements[d])) { first[k] ??= v; latest[k] = v; }
+  $('#measure-summary').replaceChildren(...(Object.keys(latest).length ? [el('table', { class: 'targets' },
+    ...Object.keys(MEASURE_LABEL).filter((k) => k in latest).map((k) => {
+      const diff = round1(latest[k] - first[k]);
+      return el('tr', {}, el('th', {}, MEASURE_LABEL[k]), el('td', {}, `${latest[k]} cm${diff ? `（最初から ${diff > 0 ? '+' : ''}${diff}）` : ''}`));
+    }))] : []));
+
+  // 生理周期
+  const cc = $('#cycle-card');
+  cc.classList.toggle('hidden', !state.profile.cycle);
+  if (state.profile.cycle) {
+    const day = cycleDay(state.periods);
+    const recentStarts = [...state.periods].sort().reverse().slice(0, 3);
+    cc.replaceChildren(
+      el('h2', {}, '生理周期'),
+      el('p', {}, day ? `今日は ${day}日目` : '開始日が記録されていません'),
+      el('button', { type: 'button', onclick: () => {
+        const d = today();
+        if (!state.periods.includes(d)) state.periods.push(d);
+        save();
+        renderBody();
+      } }, '今日を開始日として記録'),
+      recentStarts.length ? el('p', { class: 'hint' }, `最近の開始日：${recentStarts.map((d) => d.slice(5).replace('-', '/')).join('、')}`) : null,
+      el('p', { class: 'hint' }, '記録は「調子」との関係を見るためのものです。周期に合わせてトレーニングを変える根拠は、今のところ弱いとされています。'),
+    );
+  }
+}
+
+renderers.body = renderBody;
+
+// ---------- 設定 ----------
+function chips(container, selected) {
+  container.replaceChildren(...Object.entries(MUSCLES).map(([k, label]) =>
+    el('label', { class: 'chip' }, el('input', { type: 'checkbox', value: k, checked: selected.includes(k) }), el('span', {}, label))));
+}
+
+function renderSettings() {
+  const p = state.profile;
+  $('#pf-goal').replaceChildren(...options(Object.fromEntries(Object.entries(GOALS).map(([k, g]) => [k, g.label])), p.goal));
+  $('#pf-experience').replaceChildren(...options(EXPERIENCE, p.experience));
+  $('#pf-equipment').replaceChildren(...options(EQUIPMENT, p.equipment));
+  $('#pf-days').value = p.days || '';
+  $('#pf-height').value = p.height || '';
+  $('#pf-sex').value = p.sex || '';
+  $('#pf-cycle').checked = !!p.cycle;
+  chips($('#pf-focus'), p.focus || []);
+  chips($('#pf-avoid'), p.avoid || []);
+  $('#rest-seconds').value = state.settings.rest ?? '';
+  $('#rest-default').textContent = targetsFor(p).rest;
+
+  $('#new-primary').replaceChildren(...options(MUSCLES));
+  $('#new-secondary').replaceChildren(el('option', { value: '' }, 'なし'), ...options(MUSCLES));
+
+  $('#exercise-list').replaceChildren(...state.exercises.map((ex) => {
+    const parts = Object.entries(ex.muscles).sort((a, b) => b[1] - a[1]).map(([m, f]) => (f >= 1 ? MUSCLES[m] : `(${MUSCLES[m]})`));
+    return el('li', {},
+      el('span', {}, ex.name, el('span', { class: 'muscles' }, parts.join(' ') || '部位未設定')),
+      el('button', { class: 'small danger', type: 'button', onclick: () => removeExercise(ex.name) }, '削除'),
+    );
+  }));
+}
+
+renderers.settings = renderSettings;
+
+$('#profile-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const p = state.profile;
+  p.goal = $('#pf-goal').value;
+  p.experience = $('#pf-experience').value;
+  p.equipment = $('#pf-equipment').value;
+  p.days = parseInt($('#pf-days').value, 10) || null;
+  p.height = parseFloat($('#pf-height').value) || null;
+  p.sex = $('#pf-sex').value;
+  p.cycle = $('#pf-cycle').checked;
+  p.focus = [...document.querySelectorAll('#pf-focus input:checked')].map((i) => i.value);
+  p.avoid = [...document.querySelectorAll('#pf-avoid input:checked')].map((i) => i.value);
+  save();
+  refreshAll();
+  $('#profile-saved').textContent = '保存しました';
+  setTimeout(() => { $('#profile-saved').textContent = ''; }, 2000);
+});
+
+function removeExercise(name) {
+  if (state.exercises.length <= 1) return;
+  if (!confirm(`「${name}」を種目リストから外しますか？（これまでの記録は残ります）`)) return;
+  state.exercises = state.exercises.filter((e) => e.name !== name);
+  save();
+  renderExerciseOptions();
+  renderSettings();
+}
+
+$('#add-exercise-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const name = $('#new-exercise').value.trim();
+  if (!name || state.exercises.some((x) => x.name === name)) return;
+  const muscles = { [$('#new-primary').value]: 1 };
+  const secondary = $('#new-secondary').value;
+  if (secondary && !(secondary in muscles)) muscles[secondary] = 0.5;
+  state.exercises.push({ name, muscles });
+  $('#new-exercise').value = '';
+  save();
+  renderExerciseOptions();
+  renderSettings();
+});
+
+$('#rest-seconds').addEventListener('change', (e) => {
+  const v = e.target.value.trim();
+  state.settings.rest = v === '' ? null : Math.max(0, parseInt(v, 10) || 0);
+  save();
+});
+
+$('#export').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const a = el('a', { href: URL.createObjectURL(blob), download: `kintore-${today()}.json` });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+
+$('#import').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    if (!data || typeof data.workouts !== 'object') throw new Error('invalid');
+    if (!confirm('今のデータを読み込んだデータで置き換えます。よろしいですか？')) return;
+    state = normalize(data);
+    state.profile.onboarded = true;
+    save();
+    refreshAll();
+    alert('読み込みました');
+  } catch {
+    alert('ファイルを読み込めませんでした');
+  } finally {
+    e.target.value = '';
+  }
+});
+
+// ---------- 起動 ----------
+function refreshAll() {
+  renderGoalBadge();
+  renderExerciseOptions();
+  renderLog();
+  const active = document.querySelector('.tabbar button.on')?.dataset.tab;
+  renderers[active]?.();
+}
+
+refreshAll();
+if (!state.profile.onboarded) setupOnboarding();
+
+// オフラインで使えるようにし、データが消されにくいようにする
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+navigator.storage?.persist?.().catch(() => {});
