@@ -1,11 +1,11 @@
 // オフライン対応：通信できるときは最新を取得してキャッシュを更新し、
 // 通信できないときはキャッシュから返す
-const CACHE = 'kokorozashi-v6';
+const CACHE = 'kokorozashi-v7';
 const ASSETS = [
   './', 'index.html', 'style.css', 'js/app.js', 'js/science.js',
   'photo.html', 'photo.css', 'photo.js', 'manifest.webmanifest',
   'js/icons.js', 'js/illustrations.js',
-  'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-32.png',
+  'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-32.png', 'icons/favicon-96.png', 'icons/logo-256.webp',
 ];
 // Google Fonts はオフラインでも表示できるよう、一度読んだらキャッシュから使う
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];

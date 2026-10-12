@@ -487,10 +487,8 @@ label.check input { width: 22px; min-height: 22px; height: 22px; margin: 0; acce
 /* ---------- ブランド：志 ---------- */
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .brand { display: flex; align-items: center; gap: 10px; margin: 0; }
-.logo-mark { width: 34px; height: 34px; flex: none; display: block; }
-.logo-mark .logo-bg { fill: var(--brand); }
-.logo-mark .logo-fg { fill: #fff; }
-.logo-mark.big { width: 64px; height: 64px; }
+.logo-mark { width: 34px; height: 34px; flex: none; display: block; border-radius: 22%; object-fit: cover; background: #000; }
+.logo-mark.big { width: 88px; height: 88px; }
 .brand-text { font-weight: 800; font-size: 15px; color: var(--text); }
 .ob-brand { display: flex; justify-content: center; margin: 4px 0 10px; }
 #ob-title { text-align: center; font-size: 24px; font-weight: 900; }
