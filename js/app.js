@@ -125,9 +125,14 @@ function lineChart(points, unit) {
     add('line', { class: 'axis', x1: padL, x2: W - padR, y1: y(v), y2: y(v) });
     add('text', { x: padL - 6, y: y(v) + 4, 'text-anchor': 'end' }, String(round1(v)));
   }
-  add('polyline', { class: 'line', points: points.map((p, i) => `${x(i)},${y(p.value)}`).join(' ') });
+  const coords = points.map((p, i) => `${x(i)},${y(p.value)}`);
+  if (points.length > 1) {
+    const base = H - padB;
+    add('polygon', { class: 'area', points: `${x(0)},${base} ${coords.join(' ')} ${x(points.length - 1)},${base}` });
+  }
+  add('polyline', { class: 'line', points: coords.join(' ') });
   points.forEach((p, i) => {
-    const dot = add('circle', { class: 'dot', cx: x(i), cy: y(p.value), r: 3.5 });
+    const dot = add('circle', { class: 'dot', cx: x(i), cy: y(p.value), r: points.length > 30 ? 2.5 : 4 });
     const t = document.createElementNS(ns, 'title');
     t.textContent = `${formatDate(p.date)}  ${p.value} ${unit}`;
     dot.append(t);
@@ -188,16 +193,55 @@ const dateInput = $('#log-date');
 dateInput.value = today();
 dateInput.addEventListener('change', renderLog);
 
+function renderDateNav() {
+  const d = dateInput.value || today();
+  const diff = d === today() ? '今日' : d === addDays(today(), -1) ? '昨日' : null;
+  $('#date-text').textContent = diff ? `${diff}・${formatDate(d).slice(5)}` : formatDate(d);
+  $('#date-next').disabled = d >= today();
+}
+
+$('#date-prev').addEventListener('click', () => { dateInput.value = addDays(dateInput.value || today(), -1); renderLog(); });
+$('#date-next').addEventListener('click', () => {
+  const next = addDays(dateInput.value || today(), 1);
+  if (next <= today()) { dateInput.value = next; renderLog(); }
+});
+
+// 種目を、主に鍛える部位ごとにまとめて表示する
 function renderExerciseOptions() {
   const names = state.exercises.map((e) => e.name);
+  const primary = (ex) => Object.entries(ex.muscles).sort((a, b) => b[1] - a[1])[0]?.[0];
   for (const select of [$('#exercise-select'), $('#graph-exercise')]) {
     const current = select.value;
-    select.replaceChildren(...names.map((n) => el('option', { value: n }, n)));
+    const groups = new Map();
+    for (const ex of state.exercises) {
+      const m = primary(ex);
+      const label = m ? MUSCLES[m] : 'その他';
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label).push(el('option', { value: ex.name }, ex.name));
+    }
+    select.replaceChildren(...[...groups].map(([label, opts]) => el('optgroup', { label }, ...opts)));
     if (names.includes(current)) select.value = current;
   }
 }
 
 $('#exercise-select').addEventListener('change', renderSuggestion);
+
+// −／＋ボタン（重量は 20kg 未満なら 1kg 刻み）
+document.querySelectorAll('.step').forEach((b) => b.addEventListener('click', () => {
+  const input = $(`#${b.dataset.target}`);
+  const cur = parseFloat(input.value) || 0;
+  let delta = Number(b.dataset.delta);
+  if (b.dataset.target === 'weight' && (cur < 20 || (cur === 20 && delta < 0))) delta = Math.sign(delta);
+  const min = b.dataset.target === 'reps' ? 1 : 0;
+  input.value = Math.max(min, round1(cur + delta));
+}));
+
+// 余力のボタン
+document.querySelectorAll('#rir-chips button').forEach((b) => b.addEventListener('click', () => {
+  const v = $('#rir').value === b.dataset.v ? '' : b.dataset.v;
+  $('#rir').value = v;
+  document.querySelectorAll('#rir-chips button').forEach((x) => x.classList.toggle('on', x.dataset.v === v));
+}));
 
 // 前回の記録から次の重量・回数を提案し、入力欄にも入れておく
 function renderSuggestion() {
@@ -214,9 +258,10 @@ function renderSuggestion() {
   $('#reps').value = s.reps;
   const rirText = Number.isFinite(s.last.rir) ? `・余力${s.last.rir}` : '';
   box.replaceChildren(
-    el('div', {}, `前回（${s.lastDate.slice(5).replace('-', '/')}）：${s.last.weight}kg × ${s.last.reps}回${rirText}`),
-    el('strong', {}, `今日の提案：${s.weight}kg × ${s.reps}回`),
-    el('div', { class: 'hint' }, s.reason),
+    el('div', { class: 'label' }, '今日の提案'),
+    el('strong', {}, `${s.weight}kg × ${s.reps}回`),
+    el('div', { class: 'prev' }, `前回 ${s.lastDate.slice(5).replace('-', '/')}：${s.last.weight}kg × ${s.last.reps}回${rirText}`),
+    el('p', { class: 'hint' }, s.reason),
   );
   box.classList.remove('hidden');
 }
@@ -232,7 +277,7 @@ $('#add-set-form').addEventListener('submit', (e) => {
   const date = dateInput.value || today();
   (state.workouts[date] ||= []).push(set);
   save();
-  renderLog();
+  renderLog({ keepInputs: true });
   startTimer();
 });
 
@@ -240,7 +285,7 @@ function deleteSet(date, index) {
   state.workouts[date].splice(index, 1);
   if (!state.workouts[date].length) delete state.workouts[date];
   save();
-  renderLog();
+  renderLog({ keepInputs: true });
 }
 
 function groupByExercise(sets) {
@@ -252,10 +297,11 @@ function groupByExercise(sets) {
   return groups;
 }
 
-function renderLog() {
+function renderLog({ keepInputs = false } = {}) {
   const date = dateInput.value || today();
+  renderDateNav();
   const t = targetsFor(state.profile);
-  $('#rir-target').textContent = `${GOALS[state.profile.goal].short}なら、${t.reps[0]}〜${t.reps[1]}回やって「あと${t.rir[0]}〜${t.rir[1]}回できる」くらいの重さ`;
+  $('#rir-target').textContent = `目安（${GOALS[state.profile.goal].short}）：${t.reps[0]}〜${t.reps[1]}回やって、あと${t.rir[0]}〜${t.rir[1]}回できるくらいの重さ`;
 
   const sets = state.workouts[date] || [];
   const container = $('#day-log');
@@ -264,11 +310,13 @@ function renderLog() {
   } else {
     container.replaceChildren(...[...groupByExercise(sets)].map(([name, list]) =>
       el('div', { class: 'card exercise-block' },
-        el('h3', {}, name),
+        el('h3', {}, name, el('span', { class: 'count' }, `${list.length}セット`)),
         el('ul', { class: 'sets' }, ...list.map((s, n) =>
           el('li', {},
-            el('span', {}, `${n + 1}セット目　${s.weight} kg × ${s.reps} 回${Number.isFinite(s.rir) ? `（余力${s.rir}）` : ''}`),
-            el('button', { class: 'small danger', type: 'button', 'aria-label': '削除', onclick: () => deleteSet(date, s.index) }, '削除'),
+            el('span', { class: 'no' }, String(n + 1)),
+            el('span', { class: 'main' }, `${s.weight}`, el('small', {}, ' kg'), ` × ${s.reps}`, el('small', {}, ' 回')),
+            Number.isFinite(s.rir) ? el('span', { class: 'rir' }, `余力${s.rir}`) : el('span'),
+            el('button', { class: 'del', type: 'button', 'aria-label': `${n + 1}セット目を削除`, onclick: () => deleteSet(date, s.index) }, '×'),
           ),
         )),
       ),
@@ -283,7 +331,8 @@ function renderLog() {
   info.classList.toggle('hidden', !day);
   if (day) info.textContent = `生理周期 ${day}日目`;
 
-  renderSuggestion();
+  // セットを追加した直後は、入力した重量・回数をそのまま残す（次のセットも同じことが多いため）
+  if (!keepInputs) renderSuggestion();
 }
 
 document.querySelectorAll('#condition button').forEach((b) => b.addEventListener('click', () => {
@@ -292,7 +341,7 @@ document.querySelectorAll('#condition button').forEach((b) => b.addEventListener
   if (state.conditions[date] === v) delete state.conditions[date];
   else state.conditions[date] = v;
   save();
-  renderLog();
+  renderLog({ keepInputs: true });
 }));
 
 // ---------- 休憩タイマー ----------
@@ -329,30 +378,84 @@ function stopTimer() {
 $('#timer-stop').addEventListener('click', stopTimer);
 
 // ---------- 分析 ----------
+function tile(label, value, sub, cls = '') {
+  return el('div', { class: `tile ${cls}` },
+    el('div', { class: 't-label' }, label),
+    el('div', { class: 't-value' }, ...(Array.isArray(value) ? value : [value])),
+    sub ? el('div', { class: 't-sub' }, sub) : null,
+  );
+}
+
 renderers.analysis = function renderAnalysis() {
   const p = state.profile;
   const t = targetsFor(p);
   const { rows, weak, over, lowFreq } = weakPoints(state);
+  const ic = intensityCheck(state);
+  const st = stagnation(state);
+  const end = today();
+  const from = addDays(end, -6);
+  const days = Object.keys(state.workouts).filter((d) => d >= from && d <= end);
+  const totalSets = days.reduce((n, d) => n + state.workouts[d].length, 0);
+  const hasData = totalSets > 0;
   const cards = [];
 
-  // あなたの目安
-  const perSession = p.days > 0 ? `週${p.days}日なら、1回あたり各部位 ${Math.ceil(t.sets[0] / Math.min(p.days, 3))}〜${Math.ceil(t.sets[1] / Math.min(p.days, 3))} セットほど（同じ部位は週2〜3回に分けて）` : '';
+  // ひとことまとめ
+  let headline, sub;
+  if (!hasData) {
+    headline = 'まずは今週のトレーニングを記録しましょう';
+    sub = '記録すると、部位ごとの量や弱点をここで分析します。';
+  } else if (weak.length) {
+    headline = `${weak.slice(0, 2).map((r) => MUSCLES[r.muscle]).join('と')}が少なめです`;
+    sub = `ほかの部位とのバランスを取ると、見た目も力も伸びやすくなります。`;
+  } else {
+    headline = '主な部位をバランスよく鍛えられています';
+    sub = 'この調子で、重さか回数を少しずつ増やしていきましょう。';
+  }
+  cards.push(el('div', { class: 'card hero' },
+    el('h2', {}, `今週の分析・${GOALS[p.goal].short}`),
+    el('p', { class: 'headline' }, headline),
+    el('p', {}, sub),
+  ));
+
+  // 数字のタイル
+  const rirCls = ic.avgRir == null ? '' : ic.avgRir > t.rir[1] || ic.avgRir < t.rir[0] ? 'warn' : 'ok';
+  cards.push(el('div', { class: 'tiles' },
+    tile('トレーニング', [String(days.length), el('small', {}, ' 日')], '直近7日'),
+    tile('合計', [String(totalSets), el('small', {}, ' セット')], '直近7日'),
+    tile('平均の余力', ic.avgRir == null ? '—' : [String(ic.avgRir), el('small', {}, ' 回')], `目安 ${t.rir[0]}〜${t.rir[1]}回`, rirCls),
+  ));
+
+  // 改善ポイント
+  const items = [];
+  for (const r of weak) {
+    const ex = suggestExercises(state, r.muscle);
+    items.push(el('li', { class: 'bad' },
+      el('strong', {}, `${MUSCLES[r.muscle]}：週 ${r.sets} セット`),
+      el('p', { class: 'hint' }, `目安は ${r.target.lo}〜${r.target.hi} セット。あと ${round1(r.target.lo - r.sets)} セット以上を目指しましょう。`),
+      ex.length ? el('div', { class: 'try' }, ...ex.map((n) => el('span', {}, n))) : null,
+    ));
+  }
+  for (const r of lowFreq) {
+    items.push(el('li', { class: 'warn' }, el('strong', {}, `${MUSCLES[r.muscle]}：週1回だけ`), el('p', { class: 'hint' }, '量は足りています。週2回に分けると、1回の質を保ちやすくなります。')));
+  }
+  for (const r of over) {
+    items.push(el('li', { class: 'warn' }, el('strong', {}, `${MUSCLES[r.muscle]}：週 ${r.sets} セット`), el('p', { class: 'hint' }, `目安（〜${r.target.hi}）を大きく超えています。疲れが抜けないときは減らしましょう。`)));
+  }
+  for (const s of st) {
+    items.push(el('li', { class: 'warn' }, el('strong', {}, `${s.name}が伸び悩み中`), el('p', { class: 'hint' }, `直近3週間のベスト（推定1RM ${s.bestRecent}kg）が、それ以前（${s.bestBefore}kg）を超えていません。睡眠とたんぱく質を見直す、回数の範囲を変える、1週間だけ量を半分にする、などを試しましょう。`)));
+  }
   cards.push(el('div', { class: 'card' },
-    el('h2', {}, `あなたの目安（${GOALS[p.goal].short}・${EXPERIENCE[p.experience].split('（')[0]}）`),
-    el('table', { class: 'targets' },
-      el('tr', {}, el('th', {}, '週のセット数'), el('td', {}, `1部位あたり ${t.sets[0]}〜${t.sets[1]}`)),
-      el('tr', {}, el('th', {}, '回数'), el('td', {}, `${t.reps[0]}〜${t.reps[1]} 回`)),
-      el('tr', {}, el('th', {}, '余力'), el('td', {}, `あと ${t.rir[0]}〜${t.rir[1]} 回`)),
-      el('tr', {}, el('th', {}, '休憩'), el('td', {}, `${restSeconds()} 秒`)),
-    ),
-    perSession && el('p', { class: 'hint' }, perSession),
-    evidence('volume', 'rir', 'reps', ...(p.sex ? ['sex'] : [])),
+    el('h2', {}, '改善ポイント'),
+    !hasData ? el('p', { class: 'empty' }, '直近7日の記録がありません')
+      : items.length ? el('ul', { class: 'advice' }, ...items)
+        : el('ul', { class: 'advice' }, el('li', { class: 'good' }, el('strong', {}, '気になるところはありません'), el('p', { class: 'hint' }, '主な部位はすべて目安の範囲です。'))),
+    evidence('volume', 'frequency', 'progression'),
   ));
 
   // 部位ごとの週のセット数
   const maxSets = Math.max(...rows.map((r) => Math.max(r.sets, r.target?.hi || 0)), 1);
   cards.push(el('div', { class: 'card' },
-    el('h2', {}, '部位ごとのセット数（直近7日）'),
+    el('h2', {}, '部位ごとのセット数'),
     el('div', { class: 'bars' }, ...rows.map((r) => {
       const status = !r.target ? 'skip' : r.sets < r.target.lo ? (r.target.minor ? 'minor' : 'low') : r.sets > r.target.hi ? 'high' : 'ok';
       return el('div', { class: `bar-row ${status}` },
@@ -361,67 +464,38 @@ renderers.analysis = function renderAnalysis() {
           r.target && el('span', { class: 'bar-target', style: `left:${(r.target.lo / maxSets) * 100}%;width:${((r.target.hi - r.target.lo) / maxSets) * 100}%` }),
           el('span', { class: 'bar-fill', style: `width:${(r.sets / maxSets) * 100}%` }),
         ),
-        el('span', { class: 'bar-value' }, r.target ? `${r.sets}` : '対象外'),
+        el('span', { class: 'bar-value' }, r.target ? `${r.sets}` : '—'),
       );
     })),
-    el('p', { class: 'hint' }, '薄い帯が目安の範囲。補助的に使った部位は 0.5 セットとして数えています。腕・ふくらはぎ・腹筋は大きな種目でも鍛えられるので、目安を低めにしています。'),
-    evidence('volume', 'frequency'),
-  ));
-
-  // 弱点
-  const weakItems = [];
-  for (const r of weak) {
-    const ex = suggestExercises(state, r.muscle);
-    weakItems.push(el('li', {},
-      el('strong', {}, `${MUSCLES[r.muscle]}：週 ${r.sets} セット`),
-      ` （目安 ${r.target.lo}〜${r.target.hi}）`,
-      ex.length ? el('div', { class: 'hint' }, `おすすめ：${ex.join('、')}`) : null,
-    ));
-  }
-  for (const r of lowFreq) {
-    weakItems.push(el('li', {}, el('strong', {}, `${MUSCLES[r.muscle]}：週1回だけ`), el('div', { class: 'hint' }, '量は足りています。週2回に分けると、1回の質を保ちやすくなります。')));
-  }
-  for (const r of over) {
-    weakItems.push(el('li', {}, el('strong', {}, `${MUSCLES[r.muscle]}：週 ${r.sets} セット`), el('div', { class: 'hint' }, `目安（〜${r.target.hi}）を大きく超えています。回復が追いつかない場合は減らしましょう。`)));
-  }
-  const hasData = rows.some((r) => r.sets > 0);
-  cards.push(el('div', { class: 'card' },
-    el('h2', {}, '弱点・改善ポイント'),
-    !hasData ? el('p', { class: 'empty' }, '直近7日の記録がありません')
-      : weakItems.length ? el('ul', { class: 'advice' }, ...weakItems)
-        : el('p', { class: 'good' }, '主な部位はすべて目安の範囲です。この調子で続けましょう。'),
+    el('div', { class: 'legend' },
+      el('span', {}, el('i', { style: 'background:color-mix(in srgb, var(--accent) 25%, transparent)' }), '目安の範囲'),
+      el('span', {}, el('i', { style: 'background:var(--accent)' }), '十分'),
+      el('span', {}, el('i', { style: 'background:var(--danger)' }), '不足'),
+      el('span', {}, el('i', { style: 'background:var(--muted)' }), '補助の部位'),
+    ),
+    el('p', { class: 'hint' }, '直近7日。補助的に使った部位は 0.5 セットとして数えています。'),
   ));
 
   // 追い込み度と回数
-  const ic = intensityCheck(state);
-  const icItems = [];
   if (ic.total) {
-    if (ic.avgRir == null) icItems.push(el('li', {}, '「余力」を記録すると、追い込み度が目的に合っているかを判定できます。'));
-    else if (ic.avgRir > t.rir[1]) icItems.push(el('li', {}, `平均の余力 ${ic.avgRir}回：目安（${t.rir[0]}〜${t.rir[1]}）より余裕があります。重さか回数を増やしましょう。`));
-    else if (ic.avgRir < t.rir[0]) icItems.push(el('li', {}, `平均の余力 ${ic.avgRir}回：毎回限界を超えていませんか。疲れがたまりやすいので、少し余裕を残しましょう。`));
-    else icItems.push(el('li', { class: 'good' }, `平均の余力 ${ic.avgRir}回：目的に合った追い込み度です。`));
+    const list = [];
+    if (ic.avgRir == null) list.push(el('li', {}, el('strong', {}, '余力を記録してみましょう'), el('p', { class: 'hint' }, '追い込み度が目的に合っているかを判定できます。')));
+    else if (ic.avgRir > t.rir[1]) list.push(el('li', { class: 'warn' }, el('strong', {}, `余力 ${ic.avgRir}回：まだ余裕があります`), el('p', { class: 'hint' }, '重さか回数を増やしましょう。')));
+    else if (ic.avgRir < t.rir[0]) list.push(el('li', { class: 'warn' }, el('strong', {}, `余力 ${ic.avgRir}回：追い込みすぎかも`), el('p', { class: 'hint' }, '毎回限界を超えると疲れがたまります。少し余裕を残しましょう。')));
+    else list.push(el('li', { class: 'good' }, el('strong', {}, `余力 ${ic.avgRir}回：ちょうどいい追い込み度です`)));
     if (ic.inRange != null) {
-      icItems.push(el('li', { class: ic.inRange >= 60 ? 'good' : '' },
-        `目安の回数（${t.reps[0]}〜${t.reps[1]}回）に入ったセット：${ic.inRange}%`,
-        ic.inRange < 60 ? el('div', { class: 'hint' }, p.goal === 'strength' ? '筋力を伸ばすには、重めの重量で少ない回数のセットを増やしましょう。' : '重さを調整して、目安の回数で限界近くになるようにしましょう。') : null));
+      list.push(el('li', { class: ic.inRange >= 60 ? 'good' : 'warn' },
+        el('strong', {}, `目安の回数に入ったセット：${ic.inRange}%`),
+        el('p', { class: 'hint' }, ic.inRange >= 60 ? `目安は ${t.reps[0]}〜${t.reps[1]}回。いい範囲で行えています。`
+          : p.goal === 'strength' ? '筋力を伸ばすには、重めの重量で少ない回数のセットを増やしましょう。' : `重さを調整して、${t.reps[0]}〜${t.reps[1]}回で限界近くになるようにしましょう。`)));
     }
+    cards.push(el('div', { class: 'card' },
+      el('h2', {}, '追い込み度と回数'),
+      el('ul', { class: 'advice' }, ...list),
+      el('p', { class: 'hint' }, '直近14日の記録から判定しています。'),
+      evidence('rir', 'reps'),
+    ));
   }
-  cards.push(el('div', { class: 'card' },
-    el('h2', {}, '追い込み度と回数（直近14日）'),
-    ic.total ? el('ul', { class: 'advice' }, ...icItems) : el('p', { class: 'empty' }, '直近14日の記録がありません'),
-    evidence('rir', 'reps'),
-  ));
-
-  // 伸び悩み
-  const st = stagnation(state);
-  cards.push(el('div', { class: 'card' },
-    el('h2', {}, '伸び悩んでいる種目'),
-    st.length ? el('ul', { class: 'advice' }, ...st.map((s) => el('li', {},
-      el('strong', {}, s.name),
-      el('div', { class: 'hint' }, `直近3週間のベスト（推定1RM ${s.bestRecent}kg）が、それ以前（${s.bestBefore}kg）を超えていません。睡眠とたんぱく質を見直す、回数の範囲を変える、1週間だけ量を半分にして回復させる、などを試しましょう。`),
-    ))) : el('p', { class: 'hint' }, '伸び悩んでいる種目はありません（判定には各種目4回以上の記録が必要です）。'),
-    evidence('progression'),
-  ));
 
   // 調子と生理周期
   if (p.cycle) {
@@ -437,6 +511,20 @@ renderers.analysis = function renderAnalysis() {
       evidence('sex'),
     ));
   }
+
+  // あなたの目安
+  const perSession = p.days > 0 ? `週${p.days}日なら、同じ部位を週2〜3回に分けて、1回あたり ${Math.ceil(t.sets[0] / Math.min(p.days, 3))}〜${Math.ceil(t.sets[1] / Math.min(p.days, 3))} セットほど。` : '';
+  cards.push(el('div', { class: 'card' },
+    el('h2', {}, `あなたの目安（${EXPERIENCE[p.experience].split('（')[0]}）`),
+    el('table', { class: 'targets' },
+      el('tr', {}, el('th', {}, '週のセット数'), el('td', {}, `1部位 ${t.sets[0]}〜${t.sets[1]}`)),
+      el('tr', {}, el('th', {}, '回数'), el('td', {}, `${t.reps[0]}〜${t.reps[1]} 回`)),
+      el('tr', {}, el('th', {}, '余力'), el('td', {}, `あと ${t.rir[0]}〜${t.rir[1]} 回`)),
+      el('tr', {}, el('th', {}, '休憩'), el('td', {}, `${restSeconds()} 秒`)),
+    ),
+    perSession && el('p', { class: 'hint' }, perSession),
+    evidence('volume', 'rir', 'reps', ...(p.sex ? ['sex'] : [])),
+  ));
 
   $('#analysis').replaceChildren(...cards);
 };
@@ -462,7 +550,11 @@ function renderGraph() {
   const first = points[0].value, last = points.at(-1).value;
   const diff = round1(last - first);
   container.replaceChildren(
-    el('p', { class: 'hint' }, `${METRIC_LABEL[metric]}：最新 ${last}kg（最初から ${diff >= 0 ? '+' : ''}${diff}）`),
+    el('div', { class: 't-label hint' }, `${METRIC_LABEL[metric]}（最新）`),
+    el('div', { class: 'graph-head' },
+      el('p', { class: 'big' }, `${last}`, el('small', {}, ' kg')),
+      points.length > 1 ? el('span', { class: `delta${diff < 0 ? ' neg' : ''}` }, `最初から ${diff >= 0 ? '+' : ''}${diff}kg`) : null,
+    ),
     lineChart(points, 'kg'),
   );
 }
@@ -476,9 +568,11 @@ function renderHistory() {
   }
   container.replaceChildren(...dates.map((d) => {
     const summary = [...groupByExercise(state.workouts[d])].map(([name, list]) => `${name} ${list.length}セット`).join('・');
-    return el('div', { class: 'card history-day', onclick: () => { dateInput.value = d; showTab('log'); } },
-      el('div', { class: 'date' }, formatDate(d)),
-      el('div', { class: 'summary' }, summary),
+    return el('button', { type: 'button', class: 'card history-day', onclick: () => { dateInput.value = d; showTab('log'); } },
+      el('span', { style: 'text-align:left' },
+        el('span', { class: 'date', style: 'display:block' }, formatDate(d)),
+        el('span', { class: 'summary', style: 'display:block' }, summary),
+      ),
     );
   }));
 }
@@ -583,11 +677,16 @@ const MEASURE_LABEL = { waist: 'ウエスト', chest: '胸囲', arm: '腕', thig
 function renderBody() {
   // 体重
   const adv = weightAdvice(state);
+  const pt0 = proteinTarget(state);
+  const rate = adv.trend.rate;
+  $('#body-tiles').replaceChildren(
+    tile('体重', adv.trend.cur != null ? [String(adv.trend.cur), el('small', {}, ' kg')] : (latestWeightText() || '—'), adv.bmi ? `BMI ${adv.bmi}` : '7日平均'),
+    tile('週の変化', rate == null ? '—' : [`${rate > 0 ? '+' : ''}${rate}`, el('small', {}, ' %')], `目安 ${adv.range.lo}〜${adv.range.hi}%`, rate == null ? '' : adv.level === 'warn' ? 'warn' : adv.level === 'good' ? 'ok' : ''),
+    tile('たんぱく質', pt0 ? [String(pt0.grams[0]), el('small', {}, 'g〜')] : '—', '1日の目安'),
+  );
   const bwDates = Object.keys(state.bodyweights).sort();
   $('#bw-summary').replaceChildren(
-    adv.trend.cur != null ? el('p', {}, `直近7日の平均：${adv.trend.cur}kg${adv.bmi ? `（BMI ${adv.bmi}）` : ''}`) : null,
     el('div', { class: `notice ${adv.level}` }, ...adv.messages.map((m) => el('p', {}, m))),
-    el('p', { class: 'hint' }, `目的（${GOALS[state.profile.goal].short}）の目安：週 ${adv.range.lo > 0 ? '+' : ''}${adv.range.lo}〜${adv.range.hi > 0 ? '+' : ''}${adv.range.hi}%`),
     evidence('weightRate', ...(state.profile.sex === 'female' ? ['sex'] : [])),
   );
   const recent = bwDates.slice(-60).map((d) => ({ date: d, value: state.bodyweights[d] }));
@@ -632,6 +731,11 @@ function renderBody() {
       el('p', { class: 'hint' }, '記録は「調子」との関係を見るためのものです。周期に合わせてトレーニングを変える根拠は、今のところ弱いとされています。'),
     );
   }
+}
+
+function latestWeightText() {
+  const dates = Object.keys(state.bodyweights).sort();
+  return dates.length ? `${state.bodyweights[dates.at(-1)]}kg` : null;
 }
 
 renderers.body = renderBody;
