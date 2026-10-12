@@ -1,10 +1,10 @@
 // オフライン対応：通信できるときは最新を取得してキャッシュを更新し、
 // 通信できないときはキャッシュから返す
-const CACHE = 'will-v10';
+const CACHE = 'will-v11';
 const ASSETS = [
   './', 'index.html', 'style.css', 'js/app.js', 'js/science.js',
   'photo.html', 'photo.css', 'photo.js', 'manifest.webmanifest',
-  'js/icons.js', 'js/illustrations.js',
+  'js/icons.js', 'js/illustrations.js', 'js/tips.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-32.png', 'icons/favicon-96.png', 'icons/logo-256.webp',
 ];
 // Google Fonts はオフラインでも表示できるよう、一度読んだらキャッシュから使う

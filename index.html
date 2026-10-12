@@ -36,6 +36,7 @@
         <button type="button" id="date-next" class="icon-btn" aria-label="次の日"><i data-icon="chevron-right" class="icon"></i></button>
       </div>
       <p id="cycle-info" class="pill hidden"></p>
+      <p id="streak" class="streak"></p>
 
       <div class="log-grid">
       <div class="log-main">
@@ -59,6 +60,19 @@
           </div>
         </div>
         <div id="suggestion" class="suggestion hidden"></div>
+
+        <div id="sides" class="sides hidden" role="group" aria-label="右と左">
+          <button type="button" data-side="右" class="on">右</button>
+          <button type="button" data-side="左">左</button>
+        </div>
+
+        <div id="warmup" class="warmup hidden">
+          <div>
+            <span class="warmup-label">アップ（数えません）</span>
+            <strong id="warmup-text"></strong>
+          </div>
+          <button type="button" id="warmup-done" class="small">アップ完了</button>
+        </div>
 
         <div class="steppers">
           <div class="stepper">
@@ -93,15 +107,38 @@
           <p class="hint" id="rir-target"></p>
         </div>
 
-        <button type="submit" class="primary big-btn">セットを追加</button>
+        <label class="check last-set"><input type="checkbox" id="last-set"> この種目の最後のセット（休憩は種目間の1分30秒）</label>
+
+        <button type="submit" class="primary big-btn">記録して休憩スタート</button>
+
+        <details id="tips" class="tips hidden">
+          <summary>気をつけること</summary>
+          <ul id="tips-list"></ul>
+        </details>
+        <label class="ex-note">この種目のメモ
+          <input type="text" id="ex-note" placeholder="例：シートの高さ 4、グリップは広め" autocomplete="off">
+        </label>
       </form>
 
-      <div id="timer" class="timer hidden" role="timer">
-        <div>
-          <span class="timer-label"><i data-icon="timer" class="icon"></i>休憩</span>
-          <strong id="timer-display">0:00</strong>
+      <div id="timer" class="card timer-card hidden">
+        <div class="dial" id="dial">
+          <svg viewBox="0 0 200 200" aria-hidden="true">
+            <circle class="dial-bg" cx="100" cy="100" r="90"></circle>
+            <circle class="dial-fg" id="dial-ring" cx="100" cy="100" r="90"></circle>
+          </svg>
+          <div class="dial-readout">
+            <div class="dial-time" id="timer-display" role="timer" aria-live="off">0:00</div>
+            <div class="dial-label" id="timer-label">休憩</div>
+          </div>
         </div>
-        <button type="button" id="timer-stop">スキップ</button>
+        <p id="timer-banner" class="timer-banner hidden">休憩終了。次のセットへ</p>
+        <div class="timer-controls">
+          <button type="button" id="timer-minus" aria-label="15秒減らす">−15秒</button>
+          <button type="button" id="timer-toggle" class="primary">一時停止</button>
+          <button type="button" id="timer-plus" aria-label="15秒増やす">+15秒</button>
+        </div>
+        <button type="button" id="sound-off" class="sound-off hidden">🔇 音がオフになっています。タップしてオン</button>
+        <button type="button" id="timer-stop" class="small ghost">タイマーを閉じる</button>
       </div>
       </div>
 
@@ -117,6 +154,12 @@
           <button type="button" data-v="4" aria-label="良い">🙂</button>
           <button type="button" data-v="5" aria-label="とても良い">💪</button>
         </div>
+      </div>
+
+      <div class="card">
+        <h2>トレーニングメモ</h2>
+        <textarea id="day-note" rows="3" placeholder="今日の体調、気づいたこと、次回やりたいことなど"></textarea>
+        <p class="hint" id="day-note-saved" aria-live="polite"></p>
       </div>
           </div>
       </div>
@@ -285,10 +328,17 @@
 
       <div class="card">
         <h2>休憩タイマー</h2>
-        <label>秒数
+        <label>秒数（全種目共通にするとき）
           <input type="number" id="rest-seconds" min="0" step="15" inputmode="numeric">
         </label>
-        <p class="hint">空欄にすると目的に合わせた目安（<span id="rest-default"></span>秒）を使います。0 でタイマーを使いません。</p>
+        <p class="hint">空欄にすると、種目ごとに目安の休憩時間を使います（重さを扱う種目は長め、1つの筋肉だけの種目は短め。目的の基準は <span id="rest-default"></span>秒）。0 でタイマーを使いません。</p>
+        <div class="opts">
+          <label class="check"><input type="checkbox" id="opt-sound"> 音</label>
+          <label class="check"><input type="checkbox" id="opt-vibe"> バイブ（Android）</label>
+          <label class="check"><input type="checkbox" id="opt-warn"> 残り20秒で予告音</label>
+          <label class="check"><input type="checkbox" id="opt-warmup"> 1種目目の前にアップを出す</label>
+        </div>
+        <p class="hint">タイマー中は画面がつけたままになります。画面を消したり別のアプリに切り替えると、スマホの仕組みで音が鳴らないことがあります。iPhone はマナーモードだと鳴りません。</p>
       </div>
 
       <div class="card">
@@ -355,6 +405,11 @@
   </div>
 
   <div id="celebrate" class="celebrate hidden" role="status" aria-live="polite"></div>
+  <button type="button" id="sound-gate" class="sound-gate hidden">
+    <span class="sg-icon">🔈</span>
+    <span class="sg-title">タップして音をオン</span>
+    <span class="sg-sub">アプリを切り替えると、スマホの仕組みで音がオフになります</span>
+  </button>
 
   <nav class="tabbar" aria-label="メニュー">
     <div class="side-brand" aria-hidden="true"><i data-logo class="logo-mark"></i><span class="brand-text">筋トレ記録</span></div>
