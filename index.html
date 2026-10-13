@@ -341,9 +341,11 @@
         <p class="hint">タイマー中は画面がつけたままになります。画面を消したり別のアプリに切り替えると、スマホの仕組みで音が鳴らないことがあります。iPhone はマナーモードだと鳴りません。</p>
       </div>
 
+      <div class="card" id="account-card"></div>
+
       <div class="card">
         <h2>データ</h2>
-        <p class="hint">記録はこのスマホのブラウザにだけ保存されます。機種変更の前にエクスポートしてください。体の写真はエクスポートに含まれません。</p>
+        <p class="hint">ログインしていないときは、記録はこの端末のブラウザにだけ保存されます。機種変更の前にログインするか、エクスポートしてください。体の写真はクラウドにもエクスポートにも含まれません（この端末だけ）。</p>
         <div class="row">
           <button type="button" id="export">エクスポート</button>
           <label class="button">インポート
@@ -354,12 +356,53 @@
 
       <div class="card">
         <h2>このアプリについて</h2>
-        <p class="hint">記録・分析・グラフ・体重・写真の機能は、ずっと無料でお使いいただけます。データはあなたのスマホの中だけに保存され、外部に送られることはありません。今後追加予定の AI 機能は、利用料がかかるため有料プランになる予定です。</p>
+        <p class="hint">記録・分析・グラフ・体重・写真の機能は、ずっと無料でお使いいただけます。ログインしたときは記録がクラウドに保存され、あなた以外は見られません。ログインしないときは、この端末の中だけに保存されます。今後追加予定の AI 機能は、利用料がかかるため有料プランになる予定です。</p>
         <p class="hint">アドバイスは研究に基づく一般的な目安で、医療的な助言ではありません。持病のある方、妊娠中の方、極端な食事制限を考えている方は、医師に相談してください。</p>
         <p class="hint">ホーム画面に追加すると、アプリのように全画面で使え、電波がない場所でも記録できます。</p>
       </div>
     </section>
   </main>
+
+  <!-- ログイン -->
+  <div id="login" class="overlay login-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="login-title">
+    <form id="login-form" class="card sheet login-sheet">
+      <div class="ob-brand"><i data-logo class="logo-mark big"></i></div>
+      <h2 id="login-title">ログイン</h2>
+      <p class="hint" id="login-sub">ログインすると記録がクラウドに保存され、スマホと PC で同じ記録を使えます。</p>
+      <label>メールアドレス
+        <input type="email" id="login-email" autocomplete="email" required>
+      </label>
+      <label id="login-pass-wrap">パスワード
+        <input type="password" id="login-pass" autocomplete="current-password" minlength="8">
+      </label>
+      <p id="login-msg" class="login-msg" role="alert"></p>
+      <button type="submit" class="primary big-btn" id="login-submit">ログイン</button>
+      <div class="login-links">
+        <button type="button" class="ghost small" id="login-mode">はじめての方（新規登録）</button>
+        <button type="button" class="ghost small" id="login-forgot">パスワードを忘れた</button>
+      </div>
+      <button type="button" class="ghost small login-skip" id="login-skip">ログインせずに使う（この端末だけに保存）</button>
+    </form>
+    <form id="newpass-form" class="card sheet login-sheet hidden">
+      <h2>新しいパスワード</h2>
+      <label>新しいパスワード（8文字以上）
+        <input type="password" id="newpass" autocomplete="new-password" minlength="8" required>
+      </label>
+      <p id="newpass-msg" class="login-msg" role="alert"></p>
+      <button type="submit" class="primary big-btn">パスワードを変更</button>
+    </form>
+  </div>
+
+  <!-- ログイン時に、端末とクラウドのどちらの記録を使うか -->
+  <div id="choose-data" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="choose-title">
+    <div class="card sheet">
+      <h2 id="choose-title">どちらの記録を使いますか？</h2>
+      <p class="hint">この端末に、ログイン前の記録があります。クラウドにも、このアカウントの記録があります。</p>
+      <p class="hint" id="choose-detail"></p>
+      <button type="button" class="primary big-btn" id="choose-cloud">クラウドの記録を使う</button>
+      <button type="button" id="choose-local" style="margin-top:8px">この端末の記録でクラウドを上書き</button>
+    </div>
+  </div>
 
   <!-- 初回設定 -->
   <div id="onboarding" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="ob-title">
