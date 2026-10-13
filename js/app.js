@@ -1502,6 +1502,11 @@ function setLoginMode(mode) {
   $('#login-mode').textContent = mode === 'login' ? 'はじめての方（新規登録）' : 'ログインに戻る';
   $('#login-forgot').classList.toggle('hidden', mode !== 'login');
   $('#login-msg').textContent = '';
+  $('#login-sub').textContent = {
+    login: 'ログインすると記録がクラウドに保存され、スマホと PC で同じ記録を使えます。',
+    signup: 'パスワードは10文字以上で、英字と数字を両方入れてください。ほかのサービスと同じパスワードは使わないでください。',
+    forgot: '登録したメールアドレスに、パスワードを決め直すためのメールを送ります。',
+  }[mode];
 }
 function showLogin(mode = 'login') {
   setLoginMode(mode);
@@ -1517,11 +1522,19 @@ $('#login-skip').addEventListener('click', () => {
   renderAccount();
 });
 
+// パスワードの条件（Supabase 側の設定と同じ）：10文字以上、英字と数字を両方ふくむ
+function passwordProblem(pw) {
+  if (pw.length < 10) return 'パスワードは10文字以上にしてください。';
+  if (!/[A-Za-z]/.test(pw) || !/[0-9]/.test(pw)) return 'パスワードには英字と数字を両方入れてください。';
+  return '';
+}
+
 const AUTH_ERRORS = [
+  [/should contain|weak|pwned|leaked/i, 'このパスワードは使えません。英字と数字をまぜた、ほかで使っていない10文字以上のパスワードにしてください。'],
   [/invalid login credentials/i, 'メールアドレスかパスワードが違います。'],
   [/email not confirmed/i, 'メールアドレスの確認がまだです。届いたメールのリンクを開いてください。'],
   [/already registered/i, 'このメールアドレスは登録済みです。ログインしてください。'],
-  [/password should be at least/i, 'パスワードは8文字以上にしてください。'],
+  [/password should be at least/i, 'パスワードは10文字以上にしてください。'],
   [/rate limit|too many/i, '回数が多すぎます。少し時間をおいてから試してください。'],
 ];
 const authMessage = (error) => AUTH_ERRORS.find(([re]) => re.test(error?.message || ''))?.[1] || '通信できませんでした。電波のよい場所で、もう一度試してください。';
@@ -1541,7 +1554,8 @@ $('#login-form').addEventListener('submit', async (e) => {
       msg.textContent = error ? authMessage(error) : '再設定のメールを送りました。メールのリンクから新しいパスワードを決めてください。';
       msg.classList.toggle('ok', !error);
     } else if (loginMode === 'signup') {
-      if (password.length < 8) { msg.textContent = 'パスワードは8文字以上にしてください。'; return; }
+      const weak = passwordProblem(password);
+      if (weak) { msg.textContent = weak; return; }
       const { user: u, needsConfirm, error } = await cloud.signUp(email, password);
       if (error) msg.textContent = authMessage(error);
       else if (needsConfirm) {
@@ -1563,12 +1577,15 @@ $('#login-form').addEventListener('submit', async (e) => {
 
 $('#newpass-form').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const weak = passwordProblem($('#newpass').value);
+  if (weak) { $('#newpass-msg').textContent = weak; return; }
   const error = await cloud.updatePassword($('#newpass').value);
   if (error) { $('#newpass-msg').textContent = authMessage(error); return; }
   $('#newpass-form').classList.add('hidden');
   $('#login-form').classList.remove('hidden');
   $('#login').classList.add('hidden');
   recovering = false;
+  history.replaceState(null, '', location.pathname);
   if (!state.profile.onboarded) setupOnboarding();
   alert('パスワードを変更しました');
 });
@@ -1632,7 +1649,7 @@ async function initAuth() {
     if (!state.profile.onboarded) setupOnboarding();
     return;
   }
-  if (location.hash.includes('type=recovery')) recovering = true;
+  if (location.hash.includes('type=recovery') || new URLSearchParams(location.search).has('reset')) recovering = true;
   try {
     await cloud.onAuthChange((event, u) => {
       // この通知の中で Supabase を直接呼ぶと止まることがあるので、少しずらす

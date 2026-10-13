@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- 読み込めるものを、このサイト・Supabase・Google Fonts だけに制限する（不正なスクリプトの実行を防ぐ） -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://fonts.googleapis.com https://fonts.gstatic.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#0A0A0B">
   <meta name="description" content="研究に基づいて、目的に合わせたトレーニングの目安と弱点を教えてくれる筋トレ記録アプリ">
   <title>WILL | 科学で鍛える筋トレ記録</title>
@@ -373,7 +376,7 @@
         <input type="email" id="login-email" autocomplete="email" required>
       </label>
       <label id="login-pass-wrap">パスワード
-        <input type="password" id="login-pass" autocomplete="current-password" minlength="8">
+        <input type="password" id="login-pass" autocomplete="current-password">
       </label>
       <p id="login-msg" class="login-msg" role="alert"></p>
       <button type="submit" class="primary big-btn" id="login-submit">ログイン</button>
@@ -385,8 +388,8 @@
     </form>
     <form id="newpass-form" class="card sheet login-sheet hidden">
       <h2>新しいパスワード</h2>
-      <label>新しいパスワード（8文字以上）
-        <input type="password" id="newpass" autocomplete="new-password" minlength="8" required>
+      <label>新しいパスワード（10文字以上・英字と数字）
+        <input type="password" id="newpass" autocomplete="new-password" minlength="10" required>
       </label>
       <p id="newpass-msg" class="login-msg" role="alert"></p>
       <button type="submit" class="primary big-btn">パスワードを変更</button>
@@ -400,7 +403,7 @@
       <p class="hint">この端末に、ログイン前の記録があります。クラウドにも、このアカウントの記録があります。</p>
       <p class="hint" id="choose-detail"></p>
       <button type="button" class="primary big-btn" id="choose-cloud">クラウドの記録を使う</button>
-      <button type="button" id="choose-local" style="margin-top:8px">この端末の記録でクラウドを上書き</button>
+      <button type="button" id="choose-local" class="choose-local">この端末の記録でクラウドを上書き</button>
     </div>
   </div>
 

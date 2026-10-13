@@ -1,18 +1,38 @@
 // ログインとクラウド同期（Supabase）。設定がないとき・読み込めないときは null を返し、アプリは端末の中だけで動く
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
-const SDK_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
+// ライブラリは外部の配信サービスから読まず、このサイトに置いたもの（npm の公式版をそのままコピー）を使う
+const SDK_PATH = 'vendor/supabase-2.45.4.js';
 let client = null;
 
-export const cloudConfigured = () => !!(SUPABASE_URL && SUPABASE_ANON_KEY);
+// 公開してよいキー（anon / publishable）だけを使う。管理者用のキーが書かれていたら使わない
+function isSecretKey(key) {
+  if (key.startsWith('sb_secret_')) return true;
+  try { return JSON.parse(atob(key.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).role === 'service_role'; } catch { return false; }
+}
+const keyIsSafe = !!SUPABASE_ANON_KEY && !isSecretKey(SUPABASE_ANON_KEY);
+if (SUPABASE_ANON_KEY && !keyIsSafe) console.error('js/config.js に管理者用のキーが書かれています。anon public キーに差し替えてください。');
+
+export const cloudConfigured = () => !!(SUPABASE_URL.startsWith('https://') && keyIsSafe);
+
+function loadSdk() {
+  if (window.supabase?.createClient) return Promise.resolve(window.supabase);
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = SDK_PATH;
+    s.onload = () => (window.supabase?.createClient ? resolve(window.supabase) : reject(new Error('sdk')));
+    s.onerror = () => reject(new Error('sdk'));
+    document.head.append(s);
+  });
+}
 
 export async function getClient() {
   if (!cloudConfigured()) return null;
   if (client) return client;
   // オフラインでもアプリ本体は動くように、ここで必要になったときだけ読み込む
-  const { createClient } = await import(SDK_URL);
+  const { createClient } = await loadSdk();
   client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' },
   });
   return client;
 }
@@ -41,7 +61,7 @@ export async function signUp(email, password) {
 
 export async function sendPasswordReset(email) {
   const c = await getClient();
-  return (await c.auth.resetPasswordForEmail(email, { redirectTo: redirectTo() })).error;
+  return (await c.auth.resetPasswordForEmail(email, { redirectTo: `${redirectTo()}?reset=1` })).error;
 }
 
 export async function updatePassword(password) {
