@@ -7,6 +7,7 @@ import {
 import { icon, hydrateIcons, LOGO_SRC } from './icons.js';
 import { illustration } from './illustrations.js';
 import { tipsFor } from './tips.js';
+import * as cloud from './cloud.js';
 
 const STORAGE_KEY = 'kintore-v1';
 
@@ -68,15 +69,24 @@ function normalize(s) {
     exNotes: obj(s.exNotes),
     menu: { enabled: true, split: 'auto', style: 'auto', size: null, pins: {}, ...obj(s.menu) },
     catalog: CATALOG,
+    // updatedAt：最後に変更した時刻 / syncedAt：最後にクラウドへ送った時刻 / ownerId：この端末の記録の持ち主
+    sync: { updatedAt: 0, syncedAt: 0, ownerId: null, ...obj(s.sync) },
   };
 }
 
-function save() {
+function writeLocal() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
     alert('保存できませんでした。ブラウザの設定を確認してください。');
   }
+}
+
+// 端末に保存し、ログインしていればクラウドにも送る
+function save() {
+  state.sync.updatedAt = Date.now();
+  writeLocal();
+  schedulePush();
 }
 
 let state = loadState();
@@ -1293,7 +1303,7 @@ $('#mn-style').addEventListener('change', (e) => { state.menu.style = e.target.v
 $('#mn-size').addEventListener('change', (e) => { state.menu.size = Number(e.target.value) || null; save(); renderMenu(); });
 $('#mn-reset-pins').addEventListener('click', () => { state.menu.pins = {}; save(); renderMenuSettings(); renderMenu(); });
 
-renderers.settings = () => { renderSettings(); renderMenuSettings(); renderTimerSettings(); };
+renderers.settings = () => { renderSettings(); renderMenuSettings(); renderTimerSettings(); renderAccount(); };
 
 $('#profile-form').addEventListener('submit', (e) => {
   e.preventDefault();
@@ -1368,6 +1378,290 @@ $('#import').addEventListener('change', async (e) => {
   }
 });
 
+// ---------- ログインとクラウド同期 ----------
+const SKIP_KEY = 'will-skip-login';
+let user = null;
+let pushTimer = null;
+let syncStatus = '';
+
+const hasLocalData = () => state.profile.onboarded || Object.keys(state.workouts).length > 0;
+const skipLogin = () => { try { return localStorage.getItem(SKIP_KEY) === '1'; } catch { return false; } };
+const setSkip = (v) => { try { v ? localStorage.setItem(SKIP_KEY, '1') : localStorage.removeItem(SKIP_KEY); } catch { /* 無視 */ } };
+
+function syncedText() {
+  if (!state.sync.syncedAt) return '';
+  const d = new Date(state.sync.syncedAt);
+  return `最終同期 ${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+// 保存のたびに、少し待ってからクラウドへ送る（連続した操作は1回にまとめる）
+function schedulePush() {
+  if (!user) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(pushNow, 1500);
+}
+
+async function pushNow() {
+  if (!user) return;
+  clearTimeout(pushTimer);
+  try {
+    await cloud.push(user.id, state, state.sync.updatedAt || Date.now());
+    state.sync.syncedAt = Date.now();
+    syncStatus = '';
+    writeLocal();
+  } catch (e) {
+    syncStatus = 'クラウドに保存できませんでした。通信できるときに、もう一度保存します。';
+  }
+  renderAccount();
+}
+
+function replaceWithCloud(remote) {
+  const keepSync = { ownerId: user.id, updatedAt: remote.updatedAt, syncedAt: Date.now() };
+  state = normalize(remote.data);
+  state.sync = keepSync;
+  writeLocal();
+  refreshAll();
+}
+
+// 端末とクラウドのどちらを使うかを聞く
+function chooseData(remote) {
+  return new Promise((resolve) => {
+    const n = (s) => Object.keys(s?.workouts || {}).length;
+    $('#choose-detail').textContent = `この端末：${n(state)}日分の記録　／　クラウド：${n(remote.data)}日分の記録`;
+    $('#choose-data').classList.remove('hidden');
+    const done = (v) => { $('#choose-data').classList.add('hidden'); resolve(v); };
+    $('#choose-cloud').onclick = () => done('cloud');
+    $('#choose-local').onclick = () => done('local');
+  });
+}
+
+let recovering = false; // パスワード再設定のメールから開いたとき
+let signingIn = null;
+// ログインの通知とフォームの両方から呼ばれても、同期は1回だけにする
+function onSignedIn(u) {
+  if (user && user.id === u.id && signingIn) return signingIn;
+  signingIn = syncAfterSignIn(u).finally(() => { signingIn = null; });
+  return signingIn;
+}
+
+async function syncAfterSignIn(u) {
+  user = u;
+  setSkip(false);
+  if (!recovering) $('#login').classList.add('hidden');
+  syncStatus = '同期しています…';
+  renderAccount();
+  try {
+    const remote = await cloud.pull(user.id);
+    if (!remote) {
+      // クラウドが空：この端末の記録を初めて保存する
+      state.sync.ownerId = user.id;
+      if (!state.sync.updatedAt) state.sync.updatedAt = Date.now();
+      await pushNow();
+    } else if (state.sync.ownerId === user.id) {
+      // 同じアカウント：新しい方を使う
+      if (remote.updatedAt > (state.sync.updatedAt || 0)) replaceWithCloud(remote);
+      else if ((state.sync.updatedAt || 0) > remote.updatedAt) await pushNow();
+    } else if (hasLocalData()) {
+      // ログイン前の記録とクラウドの記録が両方ある
+      const pick = await chooseData(remote);
+      if (pick === 'cloud') replaceWithCloud(remote);
+      else { state.sync.ownerId = user.id; state.sync.updatedAt = Date.now(); await pushNow(); }
+    } else {
+      replaceWithCloud(remote);
+    }
+    syncStatus = '';
+  } catch (e) {
+    syncStatus = 'クラウドと同期できませんでした。この端末の記録で続けます。';
+  }
+  renderAccount();
+  refreshAll();
+  if (!state.profile.onboarded && !recovering) setupOnboarding();
+}
+
+// 別の端末で更新されていたら取り込む（アプリに戻ってきたとき）
+async function pullIfNewer() {
+  if (!user) return;
+  try {
+    const remote = await cloud.pull(user.id);
+    if (remote && remote.updatedAt > (state.sync.updatedAt || 0)) replaceWithCloud(remote);
+  } catch { /* 通信できないときはそのまま */ }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pullIfNewer(); });
+window.addEventListener('online', () => { if (user && (state.sync.updatedAt || 0) > (state.sync.syncedAt || 0)) pushNow(); });
+
+// ログイン画面
+let loginMode = 'login'; // login / signup / forgot
+function setLoginMode(mode) {
+  loginMode = mode;
+  const titles = { login: 'ログイン', signup: '新規登録', forgot: 'パスワードの再設定' };
+  $('#login-title').textContent = titles[mode];
+  $('#login-submit').textContent = { login: 'ログイン', signup: '登録する', forgot: '再設定のメールを送る' }[mode];
+  $('#login-pass-wrap').classList.toggle('hidden', mode === 'forgot');
+  $('#login-pass').required = mode !== 'forgot';
+  $('#login-pass').autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
+  $('#login-mode').textContent = mode === 'login' ? 'はじめての方（新規登録）' : 'ログインに戻る';
+  $('#login-forgot').classList.toggle('hidden', mode !== 'login');
+  $('#login-msg').textContent = '';
+}
+function showLogin(mode = 'login') {
+  setLoginMode(mode);
+  $('#onboarding').classList.add('hidden');
+  $('#login').classList.remove('hidden');
+}
+$('#login-mode').addEventListener('click', () => setLoginMode(loginMode === 'login' ? 'signup' : 'login'));
+$('#login-forgot').addEventListener('click', () => setLoginMode('forgot'));
+$('#login-skip').addEventListener('click', () => {
+  setSkip(true);
+  $('#login').classList.add('hidden');
+  if (!state.profile.onboarded) setupOnboarding();
+  renderAccount();
+});
+
+const AUTH_ERRORS = [
+  [/invalid login credentials/i, 'メールアドレスかパスワードが違います。'],
+  [/email not confirmed/i, 'メールアドレスの確認がまだです。届いたメールのリンクを開いてください。'],
+  [/already registered/i, 'このメールアドレスは登録済みです。ログインしてください。'],
+  [/password should be at least/i, 'パスワードは8文字以上にしてください。'],
+  [/rate limit|too many/i, '回数が多すぎます。少し時間をおいてから試してください。'],
+];
+const authMessage = (error) => AUTH_ERRORS.find(([re]) => re.test(error?.message || ''))?.[1] || '通信できませんでした。電波のよい場所で、もう一度試してください。';
+
+$('#login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = $('#login-email').value.trim();
+  const password = $('#login-pass').value;
+  const msg = $('#login-msg');
+  const btn = $('#login-submit');
+  btn.disabled = true;
+  msg.textContent = '';
+  msg.classList.remove('ok');
+  try {
+    if (loginMode === 'forgot') {
+      const error = await cloud.sendPasswordReset(email);
+      msg.textContent = error ? authMessage(error) : '再設定のメールを送りました。メールのリンクから新しいパスワードを決めてください。';
+      msg.classList.toggle('ok', !error);
+    } else if (loginMode === 'signup') {
+      if (password.length < 8) { msg.textContent = 'パスワードは8文字以上にしてください。'; return; }
+      const { user: u, needsConfirm, error } = await cloud.signUp(email, password);
+      if (error) msg.textContent = authMessage(error);
+      else if (needsConfirm) {
+        msg.textContent = `${email} に確認のメールを送りました。メールのリンクを開くと登録が完了します。`;
+        msg.classList.add('ok');
+      }
+      else await onSignedIn(u);
+    } else {
+      const { user: u, error } = await cloud.signIn(email, password);
+      if (error) msg.textContent = authMessage(error);
+      else await onSignedIn(u);
+    }
+  } catch (err) {
+    msg.textContent = authMessage(err);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('#newpass-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const error = await cloud.updatePassword($('#newpass').value);
+  if (error) { $('#newpass-msg').textContent = authMessage(error); return; }
+  $('#newpass-form').classList.add('hidden');
+  $('#login-form').classList.remove('hidden');
+  $('#login').classList.add('hidden');
+  recovering = false;
+  if (!state.profile.onboarded) setupOnboarding();
+  alert('パスワードを変更しました');
+});
+
+// 設定のアカウント欄
+function renderAccount() {
+  const card = $('#account-card');
+  if (!card) return;
+  if (!cloud.cloudConfigured()) {
+    card.replaceChildren(el('h2', {}, 'アカウント'),
+      el('p', { class: 'hint' }, 'クラウド同期はまだ準備中です。今は記録をこの端末の中だけに保存しています。'));
+    return;
+  }
+  if (!user) {
+    card.replaceChildren(el('h2', {}, 'アカウント'),
+      el('p', { class: 'hint' }, 'ログインすると、記録がクラウドに保存され、スマホと PC で同じ記録を使えます。機種変更しても消えません。'),
+      el('button', { type: 'button', class: 'primary', onclick: () => showLogin('login') }, 'ログイン・新規登録'));
+    return;
+  }
+  card.replaceChildren(
+    el('h2', {}, 'アカウント'),
+    el('p', { class: 'account-email' }, user.email || ''),
+    el('p', { class: 'hint' }, syncStatus || syncedText() || '同期待ち'),
+    el('div', { class: 'row' },
+      el('button', { type: 'button', onclick: () => pushNow() }, '今すぐ同期'),
+      el('button', { type: 'button', onclick: logout }, 'ログアウト')),
+    el('button', { type: 'button', class: 'small danger ghost', style: 'margin-top:12px', onclick: removeAccount }, 'アカウントを削除'),
+  );
+}
+
+async function logout() {
+  if (!confirm('ログアウトしますか？\nこの端末の記録は消え、次にログインしたときにクラウドから読み込みます。')) return;
+  if ((state.sync.updatedAt || 0) > (state.sync.syncedAt || 0)) await pushNow();
+  await cloud.signOut();
+  user = null;
+  // 別の人がこの端末を使ってもいいように、端末の記録を消す
+  state = normalize({});
+  writeLocal();
+  refreshAll();
+  showLogin('login');
+}
+
+async function removeAccount() {
+  if (!confirm('アカウントとクラウドの記録をすべて削除します。元に戻せません。よろしいですか？')) return;
+  try {
+    await cloud.deleteAccount();
+    user = null;
+    state = normalize({});
+    writeLocal();
+    refreshAll();
+    showLogin('login');
+    alert('アカウントを削除しました');
+  } catch {
+    alert('削除できませんでした。通信できる場所で、もう一度試してください。');
+  }
+}
+
+async function initAuth() {
+  if (!cloud.cloudConfigured()) {
+    renderAccount();
+    if (!state.profile.onboarded) setupOnboarding();
+    return;
+  }
+  if (location.hash.includes('type=recovery')) recovering = true;
+  try {
+    await cloud.onAuthChange((event, u) => {
+      // この通知の中で Supabase を直接呼ぶと止まることがあるので、少しずらす
+      setTimeout(() => handleAuthEvent(event, u), 0);
+    });
+    const u = await cloud.currentUser();
+    if (u) { await onSignedIn(u); return; }
+  } catch { /* オフラインなどで読み込めないときは、端末の中だけで使う */
+    renderAccount();
+    if (!state.profile.onboarded) setupOnboarding();
+    return;
+  }
+  renderAccount();
+  if (!skipLogin()) showLogin('login');
+  else if (!state.profile.onboarded) setupOnboarding();
+}
+
+function handleAuthEvent(event, u) {
+  if (event === 'PASSWORD_RECOVERY') {
+    recovering = true;
+    $('#onboarding').classList.add('hidden');
+    $('#login').classList.remove('hidden');
+    $('#login-form').classList.add('hidden');
+    $('#newpass-form').classList.remove('hidden');
+  } else if (event === 'SIGNED_IN' && u && !user) {
+    onSignedIn(u); // メールのリンクから戻ってきたとき
+  }
+}
+
 // ---------- 起動 ----------
 function refreshAll() {
   renderGoalBadge();
@@ -1379,7 +1673,7 @@ function refreshAll() {
 
 hydrateIcons();
 refreshAll();
-if (!state.profile.onboarded) setupOnboarding();
+initAuth();
 
 // オフラインで使えるようにし、データが消されにくいようにする
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

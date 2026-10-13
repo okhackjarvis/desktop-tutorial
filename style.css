@@ -782,3 +782,15 @@ textarea {
 .streak { display: flex; justify-content: center; gap: 18px; margin: 0 0 12px; font-size: 13px; color: var(--muted); }
 .streak b { font-family: var(--font-num); font-size: 20px; color: var(--text); margin: 0 2px; }
 .opts { display: grid; gap: 4px; margin: 4px 0 8px; }
+
+/* ---------- ログイン ---------- */
+.login-overlay { z-index: 12; background: var(--bg, #0A0A0B); align-items: center; }
+#choose-data { z-index: 13; }
+.login-sheet { display: flex; flex-direction: column; gap: 10px; }
+.login-sheet .ob-brand { margin-bottom: 0; }
+.login-msg { min-height: 1.2em; margin: 0; font-size: 14px; color: var(--danger); }
+.login-msg.ok { color: var(--text); }
+.login-links { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px; }
+.login-links button { color: var(--muted); }
+.login-skip { align-self: center; color: var(--muted); text-decoration: underline; }
+.account-email { font-weight: 700; word-break: break-all; }
