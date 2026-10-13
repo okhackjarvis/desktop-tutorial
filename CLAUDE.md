@@ -18,12 +18,13 @@
 - 色はロゴに合わせた黒基調＋赤 `#E3132C`。アプリの中の見た目も、ロゴと雰囲気をそろえる
 - 種目は、どこのジムでもできる基本的なものを中心に。中〜上級者は自分の種目を追加できるように
 - 頼まれた機能は、元のもの（アーティファクトなど）の動きをそのまま移植する
+- 脆弱な仕組みは使わない。外部 CDN のスクリプト、秘密の情報をリポジトリに置くこと、本人以外が読めるデータは避ける（公開リポジトリなので、個人情報も書かない）
 
 ## プロジェクト
 
 - アプリ名：**WILL**（科学で鍛える筋トレ記録）。ビルド不要の HTML / CSS / JavaScript の PWA
 - 公開先：https://okhackjarvis.github.io/desktop-tutorial/ （`muscle-training-app` ブランチを GitHub Pages で公開）
 - 作業ブランチ：`muscle-training-app`（PR #1）。push すると数分で公開ページに反映される
-- 更新したら `sw.js` の `CACHE` の名前（`will-v12` など）を上げる
+- 更新したら `sw.js` の `CACHE` の名前（`will-v13` など）を上げる
 - ログインとクラウド同期は Supabase（`js/config.js`、`supabase/schema.sql`、`docs/SUPABASE_SETUP.md`）
 - 変更したら Playwright（`/opt/pw-browsers/chromium`）でスマホ幅と PC 幅の両方を確かめてから push する

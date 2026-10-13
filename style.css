@@ -794,3 +794,4 @@ textarea {
 .login-links button { color: var(--muted); }
 .login-skip { align-self: center; color: var(--muted); text-decoration: underline; }
 .account-email { font-weight: 700; word-break: break-all; }
+.choose-local { margin-top: 8px; }

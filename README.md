@@ -34,9 +34,10 @@ AI による食事アドバイスは準備中です（サーバーと AI の利�
 | `js/tips.js` | 種目ごとの「気をつけること」 |
 | `js/cloud.js` / `js/config.js` | ログインとクラウド同期（Supabase）。`config.js` に接続先を書く |
 | `supabase/schema.sql` | Supabase に作る表と権限 |
+| `vendor/` | ログイン用ライブラリ（supabase-js 2.45.4。npm の公式版をそのまま置いたもの、MIT License） |
 | `sw.js` / `manifest.webmanifest` / `icons/` | PWA（オフライン対応・ホーム画面のアイコン） |
 
-アプリを更新したときは、`sw.js` の `CACHE` の名前（`will-v12` など）を変えると、利用者の端末のキャッシュが入れ替わります。
+アプリを更新したときは、`sw.js` の `CACHE` の名前（`will-v13` など）を変えると、利用者の端末のキャッシュが入れ替わります。
 
 ## ログインの準備
 
