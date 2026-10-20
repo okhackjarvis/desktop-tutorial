@@ -248,7 +248,7 @@ button.ghost { background: transparent; border-color: transparent; }
 .sets .main { font-size: 17px; font-weight: 700; }
 .sets .main small { font-size: 13px; }
 .sets .rir { font-size: 12px; font-weight: 700; color: var(--accent-strong); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; }
-.sets .del { min-height: 36px; width: 36px; padding: 0; border: none; background: transparent; color: var(--muted); font-size: 18px; }
+.sets .del { min-height: 44px; width: 44px; margin-right: -8px; padding: 0; border: none; background: transparent; color: var(--muted); font-size: 18px; }
 
 /* 有酸素：種類・距離・時間・記録ボタンを1行に */
 .cardio-form { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; }
@@ -817,8 +817,15 @@ textarea {
   display: grid; grid-template-columns: auto auto 1fr auto auto; gap: 6px; align-items: center;
   padding: 8px 0; border-top: 1px solid var(--border);
 }
-.mn-items li select { grid-column: 1 / -1; margin: 0; }
+.mn-items li .mn-ex, .mn-items li .mn-wide { grid-column: 1 / -1; margin: 0; }
+.mn-muscle { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.mn-muscle select { flex: 1; margin: 0; min-height: 40px; }
+.mn-base { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.mn-base input { width: 64px; margin: 0; padding: 0 6px; text-align: center; }
+.mn-base .hint { margin: 0; font-size: 12px; }
+#onboarding-menu .sheet > button { margin-top: 10px; }
+#onboarding-menu .sheet > button.small { margin-top: 0; }
 .mn-items li:first-child { border-top: none; }
 .mn-num { display: flex; align-items: center; gap: 4px; margin: 0; font-size: 13px; white-space: nowrap; }
 .mn-num input { width: 52px; margin: 0; padding: 0 6px; text-align: center; }
-.mn-items button.small { padding: 4px 10px; }
+.mn-items button.small { padding: 4px 10px; min-width: 44px; justify-self: end; }

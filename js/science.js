@@ -441,7 +441,10 @@ export function chooseForSlot(state, slotKey) {
 // ---------- 自分で決めたメニュー ----------
 // state.menu.custom = [{ name, items: [{ exercise, sets, reps?: [lo, hi] }] }]（並び順に回す）
 // state.menu.overrides = { 'YYYY-MM-DD': 日の番号 }（その日だけ手で選んだ日）
-export const customDays = (state) => (state.menu?.split === 'custom' ? (state.menu.custom || []).filter((d) => d.items?.length) : []);
+// 種目名が空の行（入力途中）は除く
+export const customDays = (state) => (state.menu?.split === 'custom'
+  ? (state.menu.custom || []).map((d) => ({ ...d, items: (d.items || []).filter((it) => it.exercise) })).filter((d) => d.items.length)
+  : []);
 
 // その日に記録した種目から、何の日だったかを判断する（いちばん多く重なる日。重ならなければ null）
 function customDayOf(state, days, date) {
@@ -482,7 +485,7 @@ function buildCustomMenu(state, date) {
     const muscle = primaryMuscle(map.get(it.exercise) || {});
     return {
       slot: null, label: MUSCLES[muscle] || '自分の種目', exercise: it.exercise,
-      sets: it.sets || 3, reps: it.reps || t.reps, alternatives: [],
+      sets: it.sets || 3, reps: it.reps || t.reps, ownReps: it.reps || null, alternatives: [],
     };
   });
   return { title: day.name, split: 'custom', index, days: days.map((d) => d.name), items };
@@ -522,11 +525,21 @@ export function buildMenu(state, date = today()) {
 //  - 前回、全セットが目標回数の上限に届いた（または余力が目安より多い）→ 重量を上げ、回数を下限に戻す
 //  - そうでなければ同じ重量で、各セット +1回（上限まで）
 //  - 前回、余力が目安より少なく回数も下限に届かなかった → 同じ重量・回数でフォームを固める
-export function setPlan(state, name, date = today(), plannedSets = null) {
+// plannedReps：自分で決めたメニューの回数 [下限, 上限]（なければ目的の目安）
+// 記録がまだない種目は、最初の設定で入れた「最近の重さ×回数」（state.baseline）から始める
+// dayIndex：自分で決めたメニューの何日目か。同じ種目が別の日にもあるとき（胸の日と脚の日のベンチなど）は、
+// 同じ日の前回を使う（同じ日の記録がまだなければ、ほかの日の前回）
+export function setPlan(state, name, date = today(), plannedSets = null, plannedReps = null, dayIndex = null) {
   const t = targetsFor(state.profile);
-  const [lo, hi] = t.reps;
-  const h = exerciseHistory(state.workouts, name).filter((x) => x.date < date);
-  const last = h.at(-1);
+  const [lo, hi] = plannedReps || t.reps;
+  let h = exerciseHistory(state.workouts, name).filter((x) => x.date < date);
+  const days = customDays(state);
+  if (dayIndex != null && days.length > 1) {
+    const same = h.filter((x) => customDayOf(state, days, x.date) === dayIndex);
+    if (same.length) h = same;
+  }
+  const base = state.baseline?.[name];
+  const last = h.at(-1) || (base ? { date: null, sets: [{ weight: base.weight, reps: base.reps }] } : null);
   if (!last) return null;
   const ex = exerciseMap(state).get(name);
   // 左右別の種目は、片側（右）のセットだけで判断する
@@ -536,9 +549,10 @@ export function setPlan(state, name, date = today(), plannedSets = null) {
   const small = ex && Object.keys(ex.muscles || {}).every((m) => !MAJOR_MUSCLES.includes(m));
   const step = W === 0 ? 0 : (small || W < 20 ? 1 : 2.5);
   const rirOf = (x) => (Number.isFinite(x.rir) ? x.rir : null);
+  // 回数が1つに決まっている種目（例：5回）は、全セットその回数に届いたら重さを上げる
   const allTop = atTop.every((x) => x.reps >= hi || (rirOf(x) != null && rirOf(x) > t.rir[1] && x.reps >= lo));
   const tooHard = atTop.some((x) => rirOf(x) != null && rirOf(x) < t.rir[0] && x.reps < lo);
-  const n = plannedSets || Math.max(atTop.length, 2);
+  const n = plannedSets || Math.max(atTop.length, last.date ? 2 : 3);
 
   let sets, reason;
   if (allTop && step) {

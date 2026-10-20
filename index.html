@@ -468,6 +468,19 @@
     </form>
   </div>
 
+  <!-- 最初の設定の続き：すでにトレーニングしている人は、今のメニューを入れる -->
+  <div id="onboarding-menu" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="obm-title">
+    <div class="card sheet">
+      <h2 id="obm-title">今のメニューを入れましょう</h2>
+      <p class="hint">すでにトレーニングしている方は、今やっているメニューを日ごとに入れてください（例：1日目＝胸、2日目＝背中）。上から順番に回り、休んだ日は数えません。</p>
+      <p class="hint">「最近」の欄に最後にやった重さと回数を入れると、初日から今日の目標（重さ・回数）が出ます。</p>
+      <div id="ob-menu-days"></div>
+      <button type="button" id="ob-add-day" class="small">＋ 日を追加</button>
+      <button type="button" id="ob-menu-save" class="primary">このメニューではじめる</button>
+      <button type="button" id="ob-menu-skip" class="ghost">あとで入れる（おまかせのメニューではじめる）</button>
+    </div>
+  </div>
+
   <div id="celebrate" class="celebrate hidden" role="status" aria-live="polite"></div>
   <button type="button" id="sound-gate" class="sound-gate hidden">
     <span class="sg-icon">🔈</span>

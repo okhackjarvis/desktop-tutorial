@@ -2,7 +2,7 @@ import {
   MUSCLES, EQUIPMENT, DEFAULT_EXERCISES, GOALS, EXPERIENCE, REFS,
   today, addDays, round1, targetsFor, weakPoints, suggestExercises, exerciseHistory,
   stagnation, intensityCheck, weightAdvice, proteinTarget, cycleDay, setPlan, restFor, workSets,
-  e1rm, LEGACY_EXERCISES, SPLITS, MENU_STYLES, buildMenu,
+  e1rm, LEGACY_EXERCISES, SPLITS, MENU_STYLES, buildMenu, customDays,
 } from './science.js';
 import { icon, hydrateIcons, LOGO_SRC } from './icons.js';
 import { illustration } from './illustrations.js';
@@ -17,6 +17,7 @@ const STORAGE_KEY = 'kintore-v1';
 //   exercises: [{ name, muscles: { muscle: 1 | 0.5 }, equip[] }],
 //   workouts: { 'YYYY-MM-DD': [{ exercise, weight, reps, rir? }] },
 //   cardio: { 'YYYY-MM-DD': [{ type, km?, min? }] },
+//   baseline: { 種目名: { weight, reps } }（記録がまだない種目の「最近の重さ×回数」。最初の設定で入れる）,
 //   bodyweights: { 'YYYY-MM-DD': kg },
 //   measurements: { 'YYYY-MM-DD': { waist, chest, arm, thigh, hip } },
 //   conditions: { 'YYYY-MM-DD': 1..5 },
@@ -62,6 +63,7 @@ function normalize(s) {
     exercises: exercises.map((e) => ({ ...e })),
     workouts: obj(s.workouts),
     cardio: obj(s.cardio),
+    baseline: obj(s.baseline),
     bodyweights: obj(s.bodyweights),
     measurements: obj(s.measurements),
     conditions: obj(s.conditions),
@@ -221,13 +223,51 @@ $('#onboarding-form').addEventListener('submit', (e) => {
   p.onboarded = true;
   save();
   $('#onboarding').classList.add('hidden');
+  // 中級者・上級者は、続けて今のメニューを入れてもらう
+  if (p.experience !== 'beginner') openMenuOnboarding();
+  else refreshAll();
+});
+
+function openMenuOnboarding() {
+  if (!state.menu.custom?.length) state.menu.custom = [{ name: '1日目', items: [{ exercise: '', sets: 3 }] }];
+  dayEditor = '#ob-menu-days';
+  renderCustomDays();
+  $('#onboarding-menu').classList.remove('hidden');
+}
+
+function closeMenuOnboarding() {
+  dayEditor = '#mn-days';
+  $('#onboarding-menu').classList.add('hidden');
+  save();
   refreshAll();
+}
+
+$('#ob-add-day').addEventListener('click', () => editDays((d) => d.push({ name: `${d.length + 1}日目`, items: [{ exercise: '', sets: 3 }] }), { structural: true }));
+$('#ob-menu-save').addEventListener('click', () => {
+  // 1つでも種目が入っていれば「自分で決める」メニューにする
+  state.menu.split = 'custom';
+  if (!customDays(state).length) state.menu.split = 'auto';
+  closeMenuOnboarding();
+});
+$('#ob-menu-skip').addEventListener('click', () => {
+  state.menu.custom = [];
+  state.menu.split = 'auto';
+  closeMenuOnboarding();
 });
 
 // ---------- 記録 ----------
 const dateInput = $('#log-date');
 dateInput.value = today();
-dateInput.addEventListener('change', renderLog);
+dateInput.addEventListener('change', () => { pickExerciseForDay(); renderLog(); });
+
+// 日付を変えたとき、選んでいる種目がその日のメニューになければ、まだ終わっていない最初の種目にする
+// （force：メニューの日を手で切り替えたときは、必ず選び直す）
+function pickExerciseForDay(force = false) {
+  const m = currentMenu();
+  if (!m || (!force && m.items.some((it) => it.exercise === $('#exercise-select').value))) return;
+  const next = nextMenuExercise();
+  if (next) { $('#exercise-select').value = next; combo.input.value = next; }
+}
 
 function renderDateNav() {
   const d = dateInput.value || today();
@@ -236,10 +276,10 @@ function renderDateNav() {
   $('#date-next').disabled = d >= today();
 }
 
-$('#date-prev').addEventListener('click', () => { dateInput.value = addDays(dateInput.value || today(), -1); renderLog(); });
+$('#date-prev').addEventListener('click', () => { dateInput.value = addDays(dateInput.value || today(), -1); pickExerciseForDay(); renderLog(); });
 $('#date-next').addEventListener('click', () => {
   const next = addDays(dateInput.value || today(), 1);
-  if (next <= today()) { dateInput.value = next; renderLog(); }
+  if (next <= today()) { dateInput.value = next; pickExerciseForDay(); renderLog(); }
 });
 
 // ---------- 種目の選択（入力で絞り込み＋候補表示） ----------
@@ -383,7 +423,7 @@ function renderExerciseOptions() {
   select.replaceChildren(...[...groups].map(([label, opts]) => el('optgroup', { label }, ...opts)));
   if (names.includes(current)) select.value = current;
   if (!names.includes($('#exercise-select').value)) {
-    const first = currentMenu()?.items[0]?.exercise || names[0];
+    const first = nextMenuExercise() || names[0];
     $('#exercise-select').value = first;
     combo.input.value = first;
   }
@@ -391,6 +431,16 @@ function renderExerciseOptions() {
 
 // ---------- 今日のメニュー ----------
 const repsText = (r) => (r[0] === r[1] ? `${r[0]}` : `${r[0]}〜${r[1]}`);
+
+// メニューのうち、まだ予定のセット数を終えていない最初の種目
+function nextMenuExercise(after = null) {
+  const m = currentMenu();
+  if (!m) return null;
+  const date = dateInput.value || today();
+  const start = after ? m.items.findIndex((it) => it.exercise === after) + 1 : 0;
+  return m.items.slice(start).find((it) => doneSets(date, it.exercise) < it.sets)?.exercise
+    || (after ? null : m.items[0]?.exercise);
+}
 
 function currentMenu() {
   if (!state.menu.enabled) return null;
@@ -412,7 +462,13 @@ function renderMenu() {
         // 自分で決めたメニューは、その日だけ別の日に切り替えられる
         ? el('select', {
           class: 'badge badge-select', 'aria-label': '今日やる日',
-          onchange: (e) => { state.menu.overrides = { ...state.menu.overrides, [date]: Number(e.target.value) }; save(); renderMenu(); },
+          onchange: (e) => {
+            state.menu.overrides = { ...state.menu.overrides, [date]: Number(e.target.value) };
+            save();
+            pickExerciseForDay(true);
+            renderSuggestion();
+            renderMenu();
+          },
         }, ...m.days.map((name, i) => el('option', { value: i, selected: i === m.index }, name)))
         : el('span', { class: 'badge' }, m.title)),
     el('ul', { class: 'menu-list' }, ...m.items.map((it) => {
@@ -477,6 +533,12 @@ function plannedSetsFor(name) {
   return currentMenu()?.items.find((i) => i.exercise === name)?.sets || null;
 }
 
+// 自分で決めたメニューで回数を決めた種目だけ、その回数を使う
+function plannedRepsFor(name) {
+  const m = currentMenu();
+  return m?.items.find((i) => i.exercise === name)?.ownReps || null;
+}
+
 function setSide(v) {
   side = v;
   document.querySelectorAll('#sides button').forEach((b) => b.classList.toggle('on', b.dataset.side === v));
@@ -490,7 +552,8 @@ function renderSuggestion({ keepInputs = false } = {}) {
   const ex = currentExercise();
   const box = $('#suggestion');
   const planned = plannedSetsFor(name);
-  const plan = setPlan(state, name, date, planned);
+  const menu = currentMenu();
+  const plan = setPlan(state, name, date, planned, plannedRepsFor(name), menu?.split === 'custom' ? menu.index : null);
   const done = doneSets(date, name);
 
   // 左右別の種目
@@ -503,14 +566,14 @@ function renderSuggestion({ keepInputs = false } = {}) {
       $('#weight').value = cur.weight;
       $('#reps').value = cur.reps;
     }
-    const lastTxt = plan.last.map((x) => `${x.weight}×${x.reps}${Number.isFinite(x.rir) ? `(余力${x.rir})` : ''}`).join('、');
+    const lastTxt = plan.last.map((x) => `${x.weight === 0 ? '自重' : x.weight}×${x.reps}${Number.isFinite(x.rir) ? `(余力${x.rir})` : ''}`).join('、');
     box.replaceChildren(
       el('div', { class: 'label' }, icon('sparkles'), '今日の目標（漸進性過負荷）'),
       el('ol', { class: 'plan-sets' }, ...plan.sets.map((p, i) =>
         el('li', { class: i < done ? 'done' : i === done ? 'now' : '' },
           el('span', { class: 'ps-no' }, `${i + 1}`),
-          el('span', { class: 'ps-main' }, `${p.weight}kg × ${p.reps}回`)))),
-      el('div', { class: 'prev' }, `前回 ${plan.date.slice(5).replace('-', '/')}：${lastTxt}`),
+          el('span', { class: 'ps-main' }, `${weightText(p.weight)} × ${p.reps}回`)))),
+      el('div', { class: 'prev' }, plan.date ? `前回 ${plan.date.slice(5).replace('-', '/')}：${lastTxt}` : `最初に入れた最近の記録：${lastTxt}`),
       el('p', { class: 'hint' }, plan.reason),
     );
     box.classList.remove('hidden');
@@ -590,9 +653,12 @@ $('#add-set-form').addEventListener('submit', (e) => {
   if (prevBest != null && weight > 0 && now > prevBest + 0.05) {
     celebrate(set.exercise, round1(now), round1(now - prevBest));
   }
+  // 最後のセットを終えたら、メニューの次の種目を選んでおく（休憩のあいだに準備できる）
+  const nextEx = !firstSide && last ? nextMenuExercise(set.exercise) : null;
+  if (nextEx) setExercise(nextEx);
   // 片側目のあとは1分、最後のセットのあとは種目間の1分30秒、それ以外は種目ごとの休憩
   if (firstSide) startTimer(60, `${ex.name}（反対側へ）`);
-  else if (last) startTimer(90, '種目間の休憩');
+  else if (last) startTimer(90, nextEx ? `次：${nextEx}` : '種目間の休憩');
   else startTimer(restFor(state, ex.name), ex.name);
 });
 
@@ -642,6 +708,15 @@ function groupByExercise(sets) {
   return groups;
 }
 
+// セットの番号。左右別の種目は「右→左」で1セットなので、右と左に同じ番号を付ける
+function setNumber(list, n) {
+  return list.filter((x, i) => i < n && !x.warmup && x.side !== '右').length + 1;
+}
+
+// 重さの表示。0kg は自重の種目なので「自重」と出す
+const weightText = (w) => (w === 0 ? '自重' : `${w}kg`);
+const weightNodes = (w) => (w === 0 ? ['自重'] : [`${w}`, el('small', {}, ' kg')]);
+
 function renderLog({ keepInputs = false } = {}) {
   const date = dateInput.value || today();
   renderDateNav();
@@ -658,8 +733,8 @@ function renderLog({ keepInputs = false } = {}) {
         el('h3', {}, name, el('span', { class: 'count' }, `${list.filter((x) => !x.warmup && x.side !== '右').length}セット`)),
         el('ul', { class: 'sets' }, ...list.map((s, n) =>
           el('li', { class: s.warmup ? 'warm' : '' },
-            el('span', { class: 'no' }, s.warmup ? 'W' : String(list.filter((x, i) => i <= n && !x.warmup && x.side !== '右').length || 1)),
-            el('span', { class: 'main' }, `${s.weight}`, el('small', {}, ' kg'), ` × ${s.reps}`, el('small', {}, ' 回'),
+            el('span', { class: 'no' }, s.warmup ? 'W' : String(setNumber(list, n))),
+            el('span', { class: 'main' }, ...weightNodes(s.weight), ` × ${s.reps}`, el('small', {}, ' 回'),
               s.warmup ? el('small', { class: 'tag' }, 'アップ') : null, s.side ? el('small', { class: 'tag' }, s.side) : null),
             Number.isFinite(s.rir) ? el('span', { class: 'rir' }, `余力${s.rir}`) : el('span'),
             el('button', { class: 'del', type: 'button', 'aria-label': `${n + 1}セット目を削除`, onclick: () => deleteSet(date, s.index) }, '×'),
@@ -1108,10 +1183,10 @@ function renderHistory() {
   }
   container.replaceChildren(...dates.map((d) => {
     const summary = [
-      ...[...groupByExercise(workSets(state.workouts[d] || []))].map(([name, list]) => `${name} ${list.length}セット`),
+      ...[...groupByExercise(workSets(state.workouts[d] || []))].map(([name, list]) => `${name} ${list.filter((x) => x.side !== '右').length}セット`),
       ...(state.cardio[d] || []).map(cardioText),
     ].join('・');
-    return el('button', { type: 'button', class: 'card history-day', onclick: () => { dateInput.value = d; showTab('log'); renderLog(); } },
+    return el('button', { type: 'button', class: 'card history-day', onclick: () => { dateInput.value = d; showTab('log'); pickExerciseForDay(); renderLog(); } },
       el('span', { style: 'text-align:left' },
         el('span', { class: 'date', style: 'display:block' }, formatDate(d)),
         el('span', { class: 'summary', style: 'display:block' }, summary),
@@ -1385,10 +1460,67 @@ function parseReps(text) {
 
 function moveUp(list, i) { [list[i - 1], list[i]] = [list[i], list[i - 1]]; }
 
+// 編集欄を出す場所（設定画面、または最初の設定）
+let dayEditor = '#mn-days';
+
+const hasHistory = (name) => Object.values(state.workouts).some((d) => d.some((x) => x.exercise === name && !x.warmup));
+
+// 一覧にない種目名を打ったときは、自分の種目として足す（主な部位はあとで選ぶ）
+function ensureExercise(name) {
+  if (!name || state.exercises.some((e) => e.name === name)) return;
+  state.exercises.push({ name, muscles: {}, custom: true });
+}
+
 function renderCustomDays() {
   const days = state.menu.custom || [];
-  const names = state.exercises.map((e) => e.name);
-  $('#mn-days').replaceChildren(...days.map((day, di) => el('div', { class: 'mn-day' },
+  const exMap = new Map(state.exercises.map((e) => [e.name, e]));
+  // 回数が空欄のときに使う、目的の目安
+  const goalReps = targetsFor(state.profile).reps.join('-');
+  // 種目名の入力候補（打ち込んでも、候補から選んでもよい）
+  let list = $('#ex-names');
+  if (!list) { list = el('datalist', { id: 'ex-names' }); document.body.append(list); }
+  list.replaceChildren(...state.exercises.map((e) => el('option', { value: e.name })));
+
+  const itemRow = (day, it, ii) => {
+    const ex = exMap.get(it.exercise);
+    const needMuscle = it.exercise && (!ex || !primaryOf(ex));
+    const base = state.baseline[it.exercise];
+    return el('li', {},
+      el('input', {
+        type: 'text', class: 'mn-ex', list: 'ex-names', value: it.exercise, placeholder: '種目名（例：ベンチプレス）', 'aria-label': '種目',
+        onchange: (e) => { it.exercise = e.target.value.trim(); ensureExercise(it.exercise); editDays(() => {}); },
+      }),
+      needMuscle ? el('label', { class: 'mn-wide mn-muscle' }, '主に鍛える部位',
+        el('select', {
+          'aria-label': `${it.exercise}の主な部位`,
+          onchange: (e) => { const x = state.exercises.find((y) => y.name === it.exercise); if (x && e.target.value) x.muscles = { [e.target.value]: 1 }; editDays(() => {}); },
+        }, el('option', { value: '' }, '選んでください'), ...options(MUSCLES))) : null,
+      el('label', { class: 'mn-num' }, el('input', {
+        type: 'number', min: 1, max: 10, step: 1, inputmode: 'numeric', value: it.sets, 'aria-label': 'セット数',
+        onchange: (e) => { it.sets = Math.max(1, parseInt(e.target.value, 10) || 1); save(); renderMenu(); },
+      }), 'セット'),
+      el('label', { class: 'mn-num' }, el('input', {
+        type: 'text', inputmode: 'numeric', value: it.reps ? repsText(it.reps).replace('〜', '-') : '', placeholder: goalReps, 'aria-label': '回数（空欄は目的の目安）',
+        onchange: (e) => { const r = parseReps(e.target.value); if (r) it.reps = r; else delete it.reps; save(); renderMenu(); },
+      }), '回'),
+      ii > 0 ? el('button', { type: 'button', class: 'small', 'aria-label': `${it.exercise}を上へ`, onclick: () => editDays(() => moveUp(day.items, ii)) }, '↑') : el('span'),
+      el('button', { type: 'button', class: 'small', 'aria-label': `${it.exercise || '種目'}を外す`, onclick: () => editDays(() => day.items.splice(ii, 1)) }, '×'),
+      // まだ記録がない種目は、最近の重さ×回数を入れると初日から目標が出る
+      it.exercise && !hasHistory(it.exercise) ? el('div', { class: 'mn-wide mn-base' },
+        el('span', {}, '最近'),
+        el('input', {
+          type: 'number', min: 0, step: 0.5, inputmode: 'decimal', value: base ? base.weight : '', placeholder: 'kg', 'aria-label': `${it.exercise}の最近の重さ (kg)`,
+          onchange: (e) => setBaseline(it.exercise, e.target.value, e.target.parentElement.querySelector('[data-b=reps]').value),
+        }), 'kg ×',
+        el('input', {
+          type: 'number', min: 1, step: 1, inputmode: 'numeric', 'data-b': 'reps', value: base ? base.reps : '', placeholder: '回', 'aria-label': `${it.exercise}の最近の回数`,
+          onchange: (e) => setBaseline(it.exercise, e.target.parentElement.querySelector('input').value, e.target.value),
+        }), '回',
+        el('span', { class: 'hint' }, '（自重は kg を空欄）')) : null,
+    );
+  };
+
+  $(dayEditor).replaceChildren(...days.map((day, di) => el('div', { class: 'mn-day' },
     el('div', { class: 'mn-day-head' },
       el('input', {
         type: 'text', value: day.name, 'aria-label': `${di + 1}日目の名前`, placeholder: '例：胸',
@@ -1397,25 +1529,18 @@ function renderCustomDays() {
       di > 0 ? el('button', { type: 'button', class: 'small', 'aria-label': `${day.name}を上へ`, onclick: () => editDays((d) => moveUp(d, di), { structural: true }) }, '↑') : null,
       el('button', { type: 'button', class: 'small', 'aria-label': `${day.name}を削除`, onclick: () => editDays((d) => d.splice(di, 1), { structural: true }) }, '削除'),
     ),
-    el('ul', { class: 'mn-items' }, ...day.items.map((it, ii) => el('li', {},
-      el('select', {
-        'aria-label': '種目', onchange: (e) => { it.exercise = e.target.value; save(); renderMenu(); },
-      }, ...[...new Set([it.exercise, ...names])].map((n) => el('option', { value: n, selected: n === it.exercise }, n))),
-      el('label', { class: 'mn-num' }, el('input', {
-        type: 'number', min: 1, max: 10, step: 1, inputmode: 'numeric', value: it.sets, 'aria-label': 'セット数',
-        onchange: (e) => { it.sets = Math.max(1, parseInt(e.target.value, 10) || 1); save(); renderMenu(); },
-      }), 'セット'),
-      el('label', { class: 'mn-num' }, el('input', {
-        type: 'text', inputmode: 'numeric', value: it.reps ? repsText(it.reps).replace('〜', '-') : '', placeholder: '8-12', 'aria-label': '回数',
-        onchange: (e) => { const r = parseReps(e.target.value); if (r) it.reps = r; else delete it.reps; save(); renderMenu(); },
-      }), '回'),
-      ii > 0 ? el('button', { type: 'button', class: 'small', 'aria-label': `${it.exercise}を上へ`, onclick: () => editDays(() => moveUp(day.items, ii)) }, '↑') : el('span'),
-      el('button', { type: 'button', class: 'small', 'aria-label': `${it.exercise}を外す`, onclick: () => editDays(() => day.items.splice(ii, 1)) }, '×'),
-    ))),
-    el('button', {
-      type: 'button', class: 'small', onclick: () => editDays(() => day.items.push({ exercise: day.items.at(-1)?.exercise || names[0], sets: 3 })),
-    }, '＋ 種目を追加'),
+    el('ul', { class: 'mn-items' }, ...day.items.map((it, ii) => itemRow(day, it, ii))),
+    el('button', { type: 'button', class: 'small', onclick: () => editDays(() => day.items.push({ exercise: '', sets: 3 })) }, '＋ 種目を追加'),
   )));
+}
+
+// 最近の重さ×回数。回数が空なら消す。重さが空なら自重（0kg）
+function setBaseline(name, kg, count) {
+  const reps = parseInt(count, 10);
+  if (reps >= 1) state.baseline[name] = { weight: parseFloat(kg) || 0, reps };
+  else delete state.baseline[name];
+  save();
+  renderMenu();
 }
 
 $('#mn-add-day').addEventListener('click', () => editDays((d) => d.push({ name: `${d.length + 1}日目`, items: [] }), { structural: true }));
@@ -1803,6 +1928,7 @@ function handleAuthEvent(event, u) {
 function refreshAll() {
   renderGoalBadge();
   renderExerciseOptions();
+  pickExerciseForDay();
   renderLog();
   const active = document.querySelector('.tabbar button.on')?.dataset.tab;
   renderers[active]?.();
