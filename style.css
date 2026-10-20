@@ -250,6 +250,11 @@ button.ghost { background: transparent; border-color: transparent; }
 .sets .rir { font-size: 12px; font-weight: 700; color: var(--accent-strong); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; }
 .sets .del { min-height: 36px; width: 36px; padding: 0; border: none; background: transparent; color: var(--muted); font-size: 18px; }
 
+/* 有酸素：種類・距離・時間・記録ボタンを1行に */
+.cardio-form { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; }
+.cardio-form button { width: auto; padding: 0 14px; }
+#cardio-list:not(:empty) { margin-top: 8px; }
+
 /* ---------- 一覧 ---------- */
 .plain { list-style: none; margin: 0 0 14px; padding: 0; }
 .plain li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 0; border-top: 1px solid var(--border); }

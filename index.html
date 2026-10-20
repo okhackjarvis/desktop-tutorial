@@ -149,6 +149,17 @@
       <div id="day-log"></div>
 
       <div class="card">
+        <h2>有酸素</h2>
+        <form id="cardio-form" class="cardio-form">
+          <select id="cardio-type" aria-label="種類"></select>
+          <input type="number" id="cardio-km" inputmode="decimal" step="0.1" min="0" placeholder="km" aria-label="距離 (km)">
+          <input type="number" id="cardio-min" inputmode="numeric" step="1" min="0" placeholder="分" aria-label="時間 (分)">
+          <button type="submit">記録</button>
+        </form>
+        <ul id="cardio-list" class="sets"></ul>
+      </div>
+
+      <div class="card">
         <h2>今日の調子</h2>
         <div class="chip-row emoji" id="condition" role="radiogroup" aria-label="今日の調子">
           <button type="button" data-v="1" aria-label="とても悪い">😫</button>

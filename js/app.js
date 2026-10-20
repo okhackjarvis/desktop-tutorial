@@ -16,6 +16,7 @@ const STORAGE_KEY = 'kintore-v1';
 //   profile: { goal, experience, equipment, days, height, weight, sex, focus[], avoid[], cycle, onboarded },
 //   exercises: [{ name, muscles: { muscle: 1 | 0.5 }, equip[] }],
 //   workouts: { 'YYYY-MM-DD': [{ exercise, weight, reps, rir? }] },
+//   cardio: { 'YYYY-MM-DD': [{ type, km?, min? }] },
 //   bodyweights: { 'YYYY-MM-DD': kg },
 //   measurements: { 'YYYY-MM-DD': { waist, chest, arm, thigh, hip } },
 //   conditions: { 'YYYY-MM-DD': 1..5 },
@@ -60,6 +61,7 @@ function normalize(s) {
     },
     exercises: exercises.map((e) => ({ ...e })),
     workouts: obj(s.workouts),
+    cardio: obj(s.cardio),
     bodyweights: obj(s.bodyweights),
     measurements: obj(s.measurements),
     conditions: obj(s.conditions),
@@ -670,6 +672,7 @@ function renderLog({ keepInputs = false } = {}) {
   // セットを追加した直後は、入力した重量・回数をそのまま残す（次のセットも同じことが多いため）
   renderSuggestion({ keepInputs });
   renderStreak();
+  renderCardio(date);
   $('#day-note').value = state.notes[date] || '';
   renderMenu();
 }
@@ -682,6 +685,48 @@ document.querySelectorAll('#condition button').forEach((b) => b.addEventListener
   save();
   renderLog({ keepInputs: true });
 }));
+
+// ---------- 有酸素 ----------
+const CARDIO_TYPES = ['ラン', 'ウォーキング', 'バイク', 'その他'];
+$('#cardio-type').replaceChildren(...CARDIO_TYPES.map((t) => el('option', { value: t }, t)));
+
+const cardioText = (c) => [c.type, c.km != null ? `${c.km}km` : null, c.min != null ? `${c.min}分` : null].filter(Boolean).join(' ');
+
+function renderCardio(date) {
+  const list = state.cardio[date] || [];
+  $('#cardio-list').replaceChildren(...list.map((c, i) =>
+    el('li', {},
+      el('span', { class: 'no' }, String(i + 1)),
+      el('span', { class: 'main' }, c.type,
+        c.km != null ? [` ${c.km}`, el('small', {}, ' km')] : null,
+        c.min != null ? [` ${c.min}`, el('small', {}, ' 分')] : null),
+      el('span'),
+      el('button', { class: 'del', type: 'button', 'aria-label': `${c.type}の記録を削除`, onclick: () => deleteCardio(date, i) }, '×'),
+    )));
+}
+
+function deleteCardio(date, i) {
+  state.cardio[date].splice(i, 1);
+  if (!state.cardio[date].length) delete state.cardio[date];
+  save();
+  renderCardio(date);
+}
+
+$('#cardio-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const km = parseFloat($('#cardio-km').value);
+  const min = parseInt($('#cardio-min').value, 10);
+  if (!(km > 0) && !(min > 0)) return;
+  const entry = { type: $('#cardio-type').value };
+  if (km > 0) entry.km = km;
+  if (min > 0) entry.min = min;
+  const date = dateInput.value || today();
+  (state.cardio[date] ||= []).push(entry);
+  $('#cardio-km').value = '';
+  $('#cardio-min').value = '';
+  save();
+  renderCardio(date);
+});
 
 // ---------- 休憩タイマー ----------
 const DIAL_C = 2 * Math.PI * 90;
@@ -1047,15 +1092,18 @@ function renderGraph() {
 }
 
 function renderHistory() {
-  const dates = Object.keys(state.workouts).sort().reverse();
+  const dates = [...new Set([...Object.keys(state.workouts), ...Object.keys(state.cardio)])].sort().reverse();
   const container = $('#history-list');
   if (!dates.length) {
     container.replaceChildren(el('div', { class: 'card' }, illustration('calendar', 'まだ記録がありません', '記録した日が、ここに並びます')));
     return;
   }
   container.replaceChildren(...dates.map((d) => {
-    const summary = [...groupByExercise(workSets(state.workouts[d]))].map(([name, list]) => `${name} ${list.length}セット`).join('・');
-    return el('button', { type: 'button', class: 'card history-day', onclick: () => { dateInput.value = d; showTab('log'); } },
+    const summary = [
+      ...[...groupByExercise(workSets(state.workouts[d] || []))].map(([name, list]) => `${name} ${list.length}セット`),
+      ...(state.cardio[d] || []).map(cardioText),
+    ].join('・');
+    return el('button', { type: 'button', class: 'card history-day', onclick: () => { dateInput.value = d; showTab('log'); renderLog(); } },
       el('span', { style: 'text-align:left' },
         el('span', { class: 'date', style: 'display:block' }, formatDate(d)),
         el('span', { class: 'summary', style: 'display:block' }, summary),

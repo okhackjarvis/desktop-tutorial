@@ -3,7 +3,7 @@
 これまでクラウドの Claude Code の会話で進めてきた WILL の開発内容を、別の会話（ローカルの Claude Desktop など）で続けられるようにまとめたものです。
 好みや作業の決まりは `CLAUDE.md` にあります。こちらは「何をどこまでやったか」と「次にやること」です。
 
-最終更新：2026-10-20（最新のコミット：「Harden login: self-host supabase-js, add CSP, tighten schema」）
+最終更新：2026-10-20（最新のコミット：「Add cardio logging and fix history day jump」）
 
 ## これまでの流れ
 
@@ -18,6 +18,7 @@
 9. ログイン（メール＋パスワード）とクラウド同期を Supabase で実装
 10. 安全面の強化：外部 CDN をやめてライブラリを `vendor/` に置く、CSP、PKCE、パスワード10文字以上（英字＋数字）、RLS の強化、容量上限、管理者キーを貼っても使わない
 11. 公開リポジトリのコミット履歴に残っていた個人のメールアドレスを、GitHub の非公開用アドレスに書き換えた（全ブランチ）
+12. 有酸素の記録（種類・距離・時間）を記録画面に追加。履歴にも出す。履歴の日付を押しても記録画面が切り替わらない不具合を修正
 
 ## 今の状態
 
@@ -55,11 +56,11 @@
 | `js/cloud.js` / `js/config.js` | Supabase とのやりとり / 接続先 |
 | `js/tips.js` / `js/icons.js` / `js/illustrations.js` | フォームのポイント / アイコンとロゴ / 空の画面のイラスト |
 | `photo.html` ほか | 体の写真の撮影と比較（写真は端末内だけ、クラウドに送らない） |
-| `sw.js` | オフライン対応。更新したら CACHE の名前を上げる（今は `will-v13`） |
+| `sw.js` | オフライン対応。更新したら CACHE の名前を上げる（今は `will-v14`） |
 | `supabase/schema.sql` | Supabase の表・権限・アカウント削除の関数 |
 | `vendor/` | supabase-js 2.45.4（npm の公式版をそのまま） |
 
-データは `localStorage` の `kintore-v1` に保存（写真は IndexedDB）。ログイン中は保存のたびに 1.5 秒待ってクラウドへ送り、アプリに戻ったときに新しい方を取り込む。
+有酸素は `state.cardio`（`{ 'YYYY-MM-DD': [{ type, km?, min? }] }`）。データは `localStorage` の `kintore-v1` に保存（写真は IndexedDB）。ログイン中は保存のたびに 1.5 秒待ってクラウドへ送り、アプリに戻ったときに新しい方を取り込む。
 
 ## 動かし方・確かめ方
 
