@@ -307,6 +307,12 @@
         <label>分け方
           <select id="mn-split"></select>
         </label>
+        <div id="mn-custom" class="hidden">
+          <p class="hint">日ごとに種目を決めます。上から順番に回り、休んだ日は数えません（急に休んでも、次の日に続きが出ます）。今日やる日は、記録画面のメニューの右上でも選び直せます。</p>
+          <div id="mn-days"></div>
+          <button type="button" id="mn-add-day" class="small">＋ 日を追加</button>
+        </div>
+        <div id="mn-auto">
         <label>種目の選び方
           <select id="mn-style"></select>
         </label>
@@ -321,6 +327,7 @@
         <p class="hint" id="mn-pins-info"></p>
         <button type="button" id="mn-reset-pins" class="small">固定した種目をリセット</button>
         <p class="hint">メニューの「入れ替え」で選んだ種目は、次回からも同じものが出ます。自分で追加した種目も候補になります。</p>
+        </div>
       </div>
 
       <div class="card">

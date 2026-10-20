@@ -1,6 +1,6 @@
 // オフライン対応：通信できるときは最新を取得してキャッシュを更新し、
 // 通信できないときはキャッシュから返す
-const CACHE = 'will-v14';
+const CACHE = 'will-v15';
 const ASSETS = [
   './', 'index.html', 'style.css', 'js/app.js', 'js/science.js',
   'photo.html', 'photo.css', 'photo.js', 'manifest.webmanifest',
@@ -35,8 +35,10 @@ self.addEventListener('fetch', (e) => {
     return;
   }
   if (url.origin !== location.origin) return;
+  // ブラウザの HTTP キャッシュ（GitHub Pages は最大10分）を使わず、毎回サーバーに新しいかを確かめる。
+  // 更新直後に新しい HTML と古い JS が混ざるのを防ぐ（変わっていなければ 304 で軽く済む）
   e.respondWith(
-    fetch(request)
+    fetch(request, { cache: 'no-cache' })
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();

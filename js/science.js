@@ -438,7 +438,58 @@ export function chooseForSlot(state, slotKey) {
   return { exercise: pick.name, alternatives: list.map((e) => e.name), pinned: pick.name === pinned };
 }
 
+// ---------- 自分で決めたメニュー ----------
+// state.menu.custom = [{ name, items: [{ exercise, sets, reps?: [lo, hi] }] }]（並び順に回す）
+// state.menu.overrides = { 'YYYY-MM-DD': 日の番号 }（その日だけ手で選んだ日）
+export const customDays = (state) => (state.menu?.split === 'custom' ? (state.menu.custom || []).filter((d) => d.items?.length) : []);
+
+// その日に記録した種目から、何の日だったかを判断する（いちばん多く重なる日。重ならなければ null）
+function customDayOf(state, days, date) {
+  const o = state.menu?.overrides?.[date];
+  if (Number.isInteger(o) && days[o]) return o;
+  const done = new Set(workSets(state.workouts[date]).map((s) => s.exercise));
+  if (!done.size) return null;
+  let best = null, bestHit = 0;
+  days.forEach((d, i) => {
+    const hit = d.items.filter((it) => done.has(it.exercise)).length;
+    if (hit > bestHit) { best = i; bestHit = hit; }
+  });
+  return best;
+}
+
+// 今日の日：その日の記録（または手で選んだ日）があればそれ、なければ前回トレーニングした日の次
+// 休んだ日は数えないので、急に休んでも順番は後ろにずれるだけ
+export function customDayIndex(state, date = today()) {
+  const days = customDays(state);
+  if (!days.length) return null;
+  const own = customDayOf(state, days, date);
+  if (own != null) return own;
+  const past = Object.keys(state.workouts).filter((d) => d < date).sort().reverse();
+  for (const d of past) {
+    const i = customDayOf(state, days, d);
+    if (i != null) return (i + 1) % days.length;
+  }
+  return 0;
+}
+
+function buildCustomMenu(state, date) {
+  const days = customDays(state);
+  const index = customDayIndex(state, date);
+  const day = days[index];
+  const t = targetsFor(state.profile);
+  const map = exerciseMap(state);
+  const items = day.items.map((it) => {
+    const muscle = primaryMuscle(map.get(it.exercise) || {});
+    return {
+      slot: null, label: MUSCLES[muscle] || '自分の種目', exercise: it.exercise,
+      sets: it.sets || 3, reps: it.reps || t.reps, alternatives: [],
+    };
+  });
+  return { title: day.name, split: 'custom', index, days: days.map((d) => d.name), items };
+}
+
 export function buildMenu(state, date = today()) {
+  if (customDays(state).length) return buildCustomMenu(state, date);
   const splitKey = splitFor(state);
   const split = SPLITS[splitKey];
   // これまでにトレーニングした日数で、今日がどの日かを決める

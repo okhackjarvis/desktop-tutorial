@@ -69,7 +69,7 @@ function normalize(s) {
     settings: { sound: true, vibe: true, warn: true, warmup: true, ...obj(s.settings), rest },
     notes: obj(s.notes),
     exNotes: obj(s.exNotes),
-    menu: { enabled: true, split: 'auto', style: 'auto', size: null, pins: {}, ...obj(s.menu) },
+    menu: { enabled: true, split: 'auto', style: 'auto', size: null, pins: {}, custom: [], overrides: {}, ...obj(s.menu) },
     catalog: CATALOG,
     // updatedAt：最後に変更した時刻 / syncedAt：最後にクラウドへ送った時刻 / ownerId：この端末の記録の持ち主
     sync: { updatedAt: 0, syncedAt: 0, ownerId: null, ...obj(s.sync) },
@@ -390,6 +390,8 @@ function renderExerciseOptions() {
 }
 
 // ---------- 今日のメニュー ----------
+const repsText = (r) => (r[0] === r[1] ? `${r[0]}` : `${r[0]}〜${r[1]}`);
+
 function currentMenu() {
   if (!state.menu.enabled) return null;
   const m = buildMenu(state, dateInput.value || today());
@@ -406,7 +408,13 @@ function renderMenu() {
   card.replaceChildren(
     el('div', { class: 'menu-head' },
       el('h2', {}, icon('target'), '今日のメニュー'),
-      el('span', { class: 'badge' }, m.title)),
+      m.split === 'custom'
+        // 自分で決めたメニューは、その日だけ別の日に切り替えられる
+        ? el('select', {
+          class: 'badge badge-select', 'aria-label': '今日やる日',
+          onchange: (e) => { state.menu.overrides = { ...state.menu.overrides, [date]: Number(e.target.value) }; save(); renderMenu(); },
+        }, ...m.days.map((name, i) => el('option', { value: i, selected: i === m.index }, name)))
+        : el('span', { class: 'badge' }, m.title)),
     el('ul', { class: 'menu-list' }, ...m.items.map((it) => {
       const done = doneSets(date, it.exercise);
       const complete = done >= it.sets;
@@ -416,7 +424,7 @@ function renderMenu() {
           el('span', { class: 'menu-check' }, complete ? icon('check') : String(m.items.indexOf(it) + 1)),
           el('span', { class: 'menu-text' },
             el('span', { class: 'menu-name' }, it.exercise, it.pinned ? el('span', { class: 'pin' }, '固定') : null),
-            el('span', { class: 'menu-sub' }, `${it.label}・${it.sets}セット × ${it.reps[0]}〜${it.reps[1]}回・${done}/${it.sets}`)),
+            el('span', { class: 'menu-sub' }, `${it.label}・${it.sets}セット × ${repsText(it.reps)}回・${done}/${it.sets}`)),
         ),
         alts.length > 1 ? el('button', {
           type: 'button', class: 'menu-swap', 'aria-label': `${it.label}の種目を入れ替える`,
@@ -1332,7 +1340,12 @@ function renderMenuSettings() {
   $('#mn-enabled').checked = !!m.enabled;
   $('#mn-split').replaceChildren(el('option', { value: 'auto' }, `自動（週${state.profile.days || 3}日 → ${SPLITS[splitAuto()].label}）`),
     ...Object.entries(SPLITS).map(([k, v]) => el('option', { value: k, selected: m.split === k }, v.label)));
+  $('#mn-split').append(el('option', { value: 'custom' }, '自分で決める'));
   $('#mn-split').value = m.split || 'auto';
+  const custom = m.split === 'custom';
+  $('#mn-custom').classList.toggle('hidden', !custom);
+  $('#mn-auto').classList.toggle('hidden', custom);
+  if (custom) renderCustomDays();
   $('#mn-style').replaceChildren(...options(MENU_STYLES, m.style || 'auto'));
   $('#mn-size').value = m.size ? String(m.size) : '';
   const pins = Object.entries(m.pins || {});
@@ -1346,7 +1359,66 @@ function splitAuto() {
 }
 
 $('#mn-enabled').addEventListener('change', (e) => { state.menu.enabled = e.target.checked; save(); renderMenu(); });
-$('#mn-split').addEventListener('change', (e) => { state.menu.split = e.target.value; save(); renderMenu(); });
+$('#mn-split').addEventListener('change', (e) => {
+  state.menu.split = e.target.value;
+  if (state.menu.split === 'custom' && !state.menu.custom?.length) state.menu.custom = [{ name: '1日目', items: [] }];
+  save();
+  renderMenuSettings();
+  renderMenu();
+});
+
+// 自分で決めるメニューの編集。並びを変えたら、手で選んだ日の記録（番号）は消す
+function editDays(fn, { structural = false } = {}) {
+  fn(state.menu.custom);
+  if (structural) state.menu.overrides = {};
+  save();
+  renderCustomDays();
+  renderMenu();
+}
+
+// 「8-12」「8〜12」「12」→ [8, 12] / [12, 12]。空や読めないときは null（目的の目安を使う）
+function parseReps(text) {
+  const n = String(text).match(/\d+/g)?.map(Number) || [];
+  if (!n.length) return null;
+  return [Math.min(n[0], n[1] ?? n[0]), Math.max(n[0], n[1] ?? n[0])];
+}
+
+function moveUp(list, i) { [list[i - 1], list[i]] = [list[i], list[i - 1]]; }
+
+function renderCustomDays() {
+  const days = state.menu.custom || [];
+  const names = state.exercises.map((e) => e.name);
+  $('#mn-days').replaceChildren(...days.map((day, di) => el('div', { class: 'mn-day' },
+    el('div', { class: 'mn-day-head' },
+      el('input', {
+        type: 'text', value: day.name, 'aria-label': `${di + 1}日目の名前`, placeholder: '例：胸',
+        onchange: (e) => { day.name = e.target.value.trim() || `${di + 1}日目`; save(); renderMenu(); },
+      }),
+      di > 0 ? el('button', { type: 'button', class: 'small', 'aria-label': `${day.name}を上へ`, onclick: () => editDays((d) => moveUp(d, di), { structural: true }) }, '↑') : null,
+      el('button', { type: 'button', class: 'small', 'aria-label': `${day.name}を削除`, onclick: () => editDays((d) => d.splice(di, 1), { structural: true }) }, '削除'),
+    ),
+    el('ul', { class: 'mn-items' }, ...day.items.map((it, ii) => el('li', {},
+      el('select', {
+        'aria-label': '種目', onchange: (e) => { it.exercise = e.target.value; save(); renderMenu(); },
+      }, ...[...new Set([it.exercise, ...names])].map((n) => el('option', { value: n, selected: n === it.exercise }, n))),
+      el('label', { class: 'mn-num' }, el('input', {
+        type: 'number', min: 1, max: 10, step: 1, inputmode: 'numeric', value: it.sets, 'aria-label': 'セット数',
+        onchange: (e) => { it.sets = Math.max(1, parseInt(e.target.value, 10) || 1); save(); renderMenu(); },
+      }), 'セット'),
+      el('label', { class: 'mn-num' }, el('input', {
+        type: 'text', inputmode: 'numeric', value: it.reps ? repsText(it.reps).replace('〜', '-') : '', placeholder: '8-12', 'aria-label': '回数',
+        onchange: (e) => { const r = parseReps(e.target.value); if (r) it.reps = r; else delete it.reps; save(); renderMenu(); },
+      }), '回'),
+      ii > 0 ? el('button', { type: 'button', class: 'small', 'aria-label': `${it.exercise}を上へ`, onclick: () => editDays(() => moveUp(day.items, ii)) }, '↑') : el('span'),
+      el('button', { type: 'button', class: 'small', 'aria-label': `${it.exercise}を外す`, onclick: () => editDays(() => day.items.splice(ii, 1)) }, '×'),
+    ))),
+    el('button', {
+      type: 'button', class: 'small', onclick: () => editDays(() => day.items.push({ exercise: day.items.at(-1)?.exercise || names[0], sets: 3 })),
+    }, '＋ 種目を追加'),
+  )));
+}
+
+$('#mn-add-day').addEventListener('click', () => editDays((d) => d.push({ name: `${d.length + 1}日目`, items: [] }), { structural: true }));
 $('#mn-style').addEventListener('change', (e) => { state.menu.style = e.target.value; save(); renderMenu(); });
 $('#mn-size').addEventListener('change', (e) => { state.menu.size = Number(e.target.value) || null; save(); renderMenu(); });
 $('#mn-reset-pins').addEventListener('click', () => { state.menu.pins = {}; save(); renderMenuSettings(); renderMenu(); });

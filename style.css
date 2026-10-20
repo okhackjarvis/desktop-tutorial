@@ -800,3 +800,25 @@ textarea {
 .login-skip { align-self: center; color: var(--muted); text-decoration: underline; }
 .account-email { font-weight: 700; word-break: break-all; }
 .choose-local { margin-top: 8px; }
+
+/* 自分で決めるメニュー：記録画面の日の切り替えと、設定の編集欄 */
+.badge-select {
+  width: auto; min-height: 0; margin: 0; border: none; cursor: pointer;
+  padding: 4px 30px 4px 12px; font-weight: 700;
+  /* .badge の背景色の上に、赤い下向き矢印を出す */
+  background: var(--accent-soft) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23E3132C' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center / 14px;
+}
+.mn-day { border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+.mn-day-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.mn-day-head input { flex: 1; font-weight: 700; }
+.mn-items { list-style: none; margin: 0 0 8px; padding: 0; }
+.mn-items li {
+  /* 1行目に種目名、2行目にセット数・回数・ボタン（設定の欄は PC でも細いので常にこの形） */
+  display: grid; grid-template-columns: auto auto 1fr auto auto; gap: 6px; align-items: center;
+  padding: 8px 0; border-top: 1px solid var(--border);
+}
+.mn-items li select { grid-column: 1 / -1; margin: 0; }
+.mn-items li:first-child { border-top: none; }
+.mn-num { display: flex; align-items: center; gap: 4px; margin: 0; font-size: 13px; white-space: nowrap; }
+.mn-num input { width: 52px; margin: 0; padding: 0 6px; text-align: center; }
+.mn-items button.small { padding: 4px 10px; }
