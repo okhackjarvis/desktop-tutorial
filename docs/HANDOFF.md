@@ -1,0 +1,71 @@
+# 引き継ぎメモ（クラウドの会話 → ローカルの会話）
+
+これまでクラウドの Claude Code の会話で進めてきた WILL の開発内容を、別の会話（ローカルの Claude Desktop など）で続けられるようにまとめたものです。
+好みや作業の決まりは `CLAUDE.md` にあります。こちらは「何をどこまでやったか」と「次にやること」です。
+
+最終更新：2026-10-20（最新のコミット：「Harden login: self-host supabase-js, add CSP, tighten schema」）
+
+## これまでの流れ
+
+1. 筋トレアプリを Web アプリ（PWA）で作ることにした。モバイルアプリより早く出せて、サーバー代もかからない（GitHub Pages で無料公開）
+2. 研究に基づいたパーソナライズ（目的：筋肥大・筋力・減量・健康維持、トレーニング歴、場所、性別は任意）
+3. 見やすい UI、PC 用レイアウト（左にサイドバー、2列）
+4. ブランド：最初は「志」→ オーナーが ChatGPT で作った「WILL」の画像に変更し、アプリ名も WILL に。UI もロゴに合わせて黒＋赤にした
+5. 種目：どこのジムでもできる基本の18種目。初心者はマシン中心のメニュー、中〜上級者はフリーウェイトや自分の種目を優先。メニューの分け方・選び方・種目数を設定で変えられる
+6. 種目の選択欄：文字入力で絞り込み（ひらがな・部位名でも）、候補にない種目はその場で追加
+7. オーナーの「トレーニング」アーティファクトの機能を移植：休憩タイマー（円形ダイヤル、音・バイブ、残り20秒の予告、画面をつけたまま）、アップ、左右別の記録、フォームのポイント、種目メモ・その日のメモ、連続日数
+8. 漸進性過負荷：前回の全セットから今日の各セットの重量・回数を提案（ダブルプログレッション）
+9. ログイン（メール＋パスワード）とクラウド同期を Supabase で実装
+10. 安全面の強化：外部 CDN をやめてライブラリを `vendor/` に置く、CSP、PKCE、パスワード10文字以上（英字＋数字）、RLS の強化、容量上限、管理者キーを貼っても使わない
+11. 公開リポジトリのコミット履歴に残っていた個人のメールアドレスを、GitHub の非公開用アドレスに書き換えた（全ブランチ）
+
+## 今の状態
+
+- 公開中：https://okhackjarvis.github.io/desktop-tutorial/ （`muscle-training-app` ブランチ。PR #1 は開いたまま、マージしていない）
+- ログイン機能は**コードは完成、まだ動いていない**。`js/config.js` が空なので、今はログイン画面を出さず、端末の中だけに保存する動き（以前と同じ）
+- テストは Playwright で実施済み（偽の Supabase を使ったログイン・同期の流れ、本物のライブラリの読み込み、既存機能の回帰）
+
+## 次にやること
+
+1. **Supabase の準備（オーナーの作業）**：`docs/SUPABASE_SETUP.md` の手順どおり
+   - プロジェクトを作る（Region は Tokyo）
+   - `supabase/schema.sql` を SQL Editor で実行
+   - Site URL と Redirect URLs（`https://okhackjarvis.github.io/desktop-tutorial/**`）
+   - 安全のための設定（Confirm email、パスワード10文字・英字と数字、Secure email change）
+   - GitHub と Supabase の2段階認証
+2. **Project URL と anon public キーを `js/config.js` に書く**（service_role / secret キーは絶対に使わない）→ `sw.js` の CACHE を上げて push → 公開ページで実際に登録・ログイン・同期を確かめる
+3. オーナーの GitHub 設定：Settings → Emails →「Keep my email addresses private」と「Block command line pushes that expose my email」をオン
+
+## まだ返事をもらっていない提案（頼まれたらやる）
+
+- タイマーを記録なしでも手動で動かせるボタン（またはタイマー専用のタブ）
+- App Store への公開（Capacitor で包む。Mac と Apple Developer Program 年 99 ドルが必要。オーナーが Mac を持っているか未確認）
+- AI による食事・体のアドバイス（サーバーと AI の利用料が必要。有料プランで提供する案）
+- 独自ドメイン（ムームードメインを検討中。ブランド名は WILL）
+- 今日のメニューのカードを折りたためるようにする
+
+## コードの地図
+
+| ファイル | 内容 |
+|---|---|
+| `index.html` | 画面（記録・分析・進捗・体・設定のタブ、ログイン画面、初回設定） |
+| `style.css` | 見た目。後半に黒基調の上書きとログイン画面のスタイル |
+| `js/app.js` | 画面の処理。後半に「ログインとクラウド同期」のまとまりがある |
+| `js/science.js` | 研究に基づく目安・分析・メニュー作成・重量の提案（画面に依存しない） |
+| `js/cloud.js` / `js/config.js` | Supabase とのやりとり / 接続先 |
+| `js/tips.js` / `js/icons.js` / `js/illustrations.js` | フォームのポイント / アイコンとロゴ / 空の画面のイラスト |
+| `photo.html` ほか | 体の写真の撮影と比較（写真は端末内だけ、クラウドに送らない） |
+| `sw.js` | オフライン対応。更新したら CACHE の名前を上げる（今は `will-v13`） |
+| `supabase/schema.sql` | Supabase の表・権限・アカウント削除の関数 |
+| `vendor/` | supabase-js 2.45.4（npm の公式版をそのまま） |
+
+データは `localStorage` の `kintore-v1` に保存（写真は IndexedDB）。ログイン中は保存のたびに 1.5 秒待ってクラウドへ送り、アプリに戻ったときに新しい方を取り込む。
+
+## 動かし方・確かめ方
+
+```sh
+python3 -m http.server 8000
+# http://localhost:8000 を開く
+```
+
+変更したら、スマホ幅（390px）と PC 幅の両方で表示とエラーがないことを確かめてから push する。
